@@ -1,0 +1,12 @@
+.DS_Store
+node_modules/
+npm-debug.log
+/modules
+index.js
+recover.js
+fcore_deploy.zip
+create_tables.js
+config*.json
+/test/
+
+*.rdb
