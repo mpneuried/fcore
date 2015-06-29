@@ -1,0 +1,15 @@
+{
+	"awsconfig": {
+		"region": "eu-central-1",
+		"apiVersion": "2012-08-10",
+		"sslEnabled": true
+	},
+	"rsmq": {
+		"host": "172.31.20.0",
+		"port": 6379,
+		"ns": "fcorersmq"
+	},
+	"memcached": ["172.31.20.0:11211"],
+	"port": 8080
+
+}

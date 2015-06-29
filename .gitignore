@@ -6,7 +6,6 @@ index.js
 recover.js
 fcore_deploy.zip
 create_tables.js
-config*.json
 /test/
 
 *.rdb

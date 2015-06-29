@@ -5,9 +5,10 @@ EXPOSE 8080
 RUN mkdir -p /usr/src/app
 WORKDIR /usr/src/app
 
-ONBUILD COPY package.json /usr/src/app/
-ONBUILD RUN npm install
-ONBUILD RUN grunt build
-ONBUILD COPY . /usr/src/app
+COPY package.json /usr/src/app/
+RUN npm install
+COPY . /usr/src/app
+RUN npm install -g grunt-cli
+RUN grunt build
 
 CMD [ "npm", "start" ]
