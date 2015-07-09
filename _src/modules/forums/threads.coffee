@@ -144,7 +144,7 @@ class Threads
 	# * `p` (Object) Properties object
 	#
 	insert: (o, cb) ->
-		if utils.validate(o, ["fid","a","p","ts"], cb) is false
+		if utils.validate(o, ["fid","a","p","ts","top"], cb) is false
 			return
 		# We verify the user for this forums community and return his name and community id.
 		users.verify o, (err, user) ->
@@ -176,7 +176,11 @@ class Threads
 							ComparisonOperator: "NULL"
 						id:
 							ComparisonOperator: "NULL"
-				
+				# Only add the `sticky` flag when it's there
+				if o.top
+					params.Item.top = 
+						N: "1"
+
 				dynamodb.putItem params, (err, data) ->
 					if err
 						if err.message is "The conditional request failed"
@@ -210,7 +214,7 @@ class Threads
 		params =
 			TableName: TABLENAME
 			Limit: 50
-			AttributesToGet: ["id", "a", "t", "v", "la", "lm", "tm", "p"]
+			AttributesToGet: ["id", "a", "t", "v", "la", "lm", "tm", "p","top"]
 			KeyConditions:
 				pid:
 					ComparisonOperator: "EQ"
@@ -290,7 +294,7 @@ class Threads
 	# Update a thread
 	#
 	update: (o, cb) ->
-		if utils.validate(o, ["tid","fid","p","v"], cb) is false
+		if utils.validate(o, ["tid","fid","p","v","top"], cb) is false
 			return
 		@get o, (err, resp) ->
 			if err
@@ -301,9 +305,10 @@ class Threads
 				return
 
 			# Nothing changed. Bail out and return the current item.
-			if _.isEqual(resp.p, o.p)
+			if _.isEqual(resp.p, o.p) and _stickyUnchanged(resp, o)
 				cb(null, resp)
 				return
+
 			utils.getTimestamp (err, ts) ->
 				if err
 					cb(err)
@@ -328,6 +333,27 @@ class Threads
 							ComparisonOperator: "EQ"
 							AttributeValueList: [{"S": o.v}]
 					ReturnValues: "ALL_NEW"
+				# This was a sticky thread but it is turned off now.
+				if resp.top and o.top is null
+					# Remove the sticky `top` flag
+					params.AttributeUpdates.top =
+						Action: "DELETE"
+					# Thread is swithed to being "non-sticky".
+					if resp.lm and resp.lm[0] is "m"
+						params.AttributeUpdates.lm =
+							Value:
+								S: "M#{resp.lm[-8..]}"
+							Action: "PUT"
+				# Thread is switched to being "sticky" with the `top` flag.
+				if not resp.top and o.top is 1
+					params.AttributeUpdates.top = 1
+					if resp.lm and resp.lm[0] is "M"
+						params.AttributeUpdates.lm =
+							Value:
+								S: "m#{resp.lm[-8..]}"
+							Action: "PUT"
+
+
 				dynamodb.updateItem params, (err, data) ->
 					if err
 						if err.message is "The conditional request failed"
@@ -399,7 +425,7 @@ class Threads
 						params.AttributeUpdates.lm =
 							Action: "PUT"
 							Value:
-								S: lastMsg.id
+								S: if o.top then "m#{lastMsg.id[-8..]}" else "M#{lastMsg.id[-8..]}"
 						params.AttributeUpdates.la =
 							Action: "PUT"
 							Value:
@@ -409,7 +435,7 @@ class Threads
 					params.AttributeUpdates.lm =
 						Action: "PUT"
 						Value:
-							S: o.mid
+							S: if o.top then "m#{o.mid[-8..]}" else o.mid 
 					params.AttributeUpdates.la =
 						Action: "PUT"
 						Value:
@@ -449,6 +475,12 @@ class Threads
 				cb(null, {a:""})
 			return
 		return
+
+
+_stickyUnchanged = (resp, o) ->
+	if resp.top is o.top or (not resp.top? and o.top is null)
+		return true
+	return false
 
 
 _cacheAndReturn = (data, cb) ->

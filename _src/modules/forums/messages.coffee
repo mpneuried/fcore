@@ -107,8 +107,9 @@ class Messages
 					if err
 						cb(err)
 						return
-					
-					
+					# Make sure to keep the `top` flag.
+					if resp.top
+						o.top = 1
 					params =
 						TableName: TABLENAME
 						Item:
@@ -134,14 +135,10 @@ class Messages
 					dynamodb.putItem params, (err, data) ->
 						if err
 							if err.message is "The conditional request failed"
-								# Message insert failed. Deduct the message from thread `tm` again.
-								threads.updateCounter _.extend(o, {tm: -1}), (err, resp) ->
-									utils.throwError(cb, "messageExists")
-									return
+								utils.throwError(cb, "messageExists")
 								return
 							cb(err)
 							return
-
 						threads.updateCounter _.extend(o, {tm: 1}), (err, resp) ->
 							if err
 								if err.message is "The conditional request failed"
@@ -152,9 +149,6 @@ class Messages
 							# We return the thread and the message
 							result = 
 								thread: resp
-
-
-
 
 							o.tid = result.thread.id
 							o.cid = user.cid

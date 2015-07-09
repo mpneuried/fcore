@@ -189,6 +189,14 @@ class Utils
 					if not _VALID.cid.test(o[item])
 						@throwError(cb, "invalidValue", {msg:"`#{item}` must be in the format XXXX_abcd1234"})
 						return false
+				when "extid"
+					if o[item]?
+						if not _.isString(o[item])
+							@throwError(cb, "invalidValue", {msg:"`#{item}` must be a string."})
+							return false
+						if not _VALID.extid.test(o[item])
+							@throwError(cb, "invalidValue", {msg:"`#{item}` must be between 1 and 256 chars"})
+							return false
 				when "fid", "v", "tid", "mid"
 					if not o[item]?
 						@throwError(cb, "missingParameter", {item:item})
@@ -243,26 +251,23 @@ class Utils
 					if not _VALID.tpid.test(o[item])
 						@throwError(cb, "invalidValue", {msg:"`#{item}` must only contain [a-zA-Z0-9-]"})
 						return false
-				when "extid"
-					if o[item]?
-						if not _.isString(o[item])
-							@throwError(cb, "invalidValue", {msg:"`#{item}` must be a string."})
-							return false
-						if not _VALID.extid.test(o[item])
-							@throwError(cb, "invalidValue", {msg:"`#{item}` must be between 1 and 256 chars"})
-							return false
+				when "top"
+					if o[item]
+						o[item] = 1
+					else
+						o[item] = null
 				when "ts"
 					if o[item]?
 						if not _VALID.ts.test(o[item])
 							@throwError(cb, "invalidValue", {msg:"`#{item}` must be a valid alpha-numeric timestamp."})
 							return false
 				when "type"
-					if o.type is "p"
-						o.type = ["id","p"]
-					else if o.type is "all"
-						o.type = ["id","c","p","v"]
+					if o[item] is "p"
+						o[item] = ["id","p"]
+					else if o[item] is "all"
+						o[item] = ["id","c","p","v"]
 					else
-						o.type = ["id"]		
+						o[item] = ["id"]		
 		return o
 
 # Error handling
