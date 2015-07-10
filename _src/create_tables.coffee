@@ -61,8 +61,8 @@ create_fcore = (cb) ->
 				Projection:
 					ProjectionType: "ALL"
 				ProvisionedThroughput:
-					ReadCapacityUnits: 10
-					WriteCapacityUnits: 5
+					ReadCapacityUnits: 15
+					WriteCapacityUnits: 20
 
 		]
 
@@ -96,8 +96,8 @@ create_fcore_f = (cb) ->
 			Projection:
 				ProjectionType: "ALL"
 			ProvisionedThroughput:
-				ReadCapacityUnits: 5
-				WriteCapacityUnits: 5
+				ReadCapacityUnits: 3
+				WriteCapacityUnits: 3
 		,
 			IndexName: "cid-index"
 			KeySchema: [
@@ -107,13 +107,13 @@ create_fcore_f = (cb) ->
 			Projection:
 				ProjectionType: "ALL"
 			ProvisionedThroughput:
-				ReadCapacityUnits: 5
-				WriteCapacityUnits: 5
+				ReadCapacityUnits: 3
+				WriteCapacityUnits: 3
 		]
 
 		ProvisionedThroughput:
-			ReadCapacityUnits: 5
-			WriteCapacityUnits: 5
+			ReadCapacityUnits: 3
+			WriteCapacityUnits: 3
 
 	dynamodb.createTable params, (err, resp) ->
 		console.log "TABLE fcore_c CREATED", err, resp
