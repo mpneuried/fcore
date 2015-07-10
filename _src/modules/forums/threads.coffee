@@ -339,15 +339,18 @@ class Threads
 					params.AttributeUpdates.top =
 						Action: "DELETE"
 					# Thread is swithed to being "non-sticky".
-					if resp.lm and resp.lm[0] is "m"
+					if resp.lm
 						params.AttributeUpdates.lm =
 							Value:
 								S: "M#{resp.lm[-8..]}"
 							Action: "PUT"
 				# Thread is switched to being "sticky" with the `top` flag.
 				if not resp.top and o.top is 1
-					params.AttributeUpdates.top = 1
-					if resp.lm and resp.lm[0] is "M"
+					params.AttributeUpdates.top =
+						Value:
+							S: "1"
+						Action: "PUT"
+					if resp.lm
 						params.AttributeUpdates.lm =
 							Value:
 								S: "m#{resp.lm[-8..]}"

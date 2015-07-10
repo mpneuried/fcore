@@ -140,6 +140,8 @@ class Utils
 			return {}
 		if item.p?
 			item.p = JSON.parse(item.p)
+		if item.lm
+			item.lm = "M#{item.lm[-8..]}"
 		return _.omit(item, "pid")
 
 
