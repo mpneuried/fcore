@@ -7,6 +7,7 @@ TABLENAME = "fcore"
 
 mcprefix = "fc_t"
 
+fields = "id, fid, a, v, la, lm, tm, p, top"
 
 class Threads
 	# Try to grab messages of a deleted thread 
@@ -55,50 +56,31 @@ class Threads
 	delete: (o, cb) ->
 		if utils.validate(o, ["tid","fid"], cb) is false
 			return
-		params =
-			TableName: TABLENAME
-			Key:
-				pid:
-					S: o.fid
-				id:
-					S: o.tid
-			ReturnValues: "ALL_OLD"
-		dynamodb.deleteItem params, (err, resp) ->
+		@get o, (err, resp) ->
 			if err
 				cb(err)
 				return
-			if not resp.Attributes?
+		query =
+			name: "delete thread"
+			text: "DELETE FROM t WHERE id = $1 and fid = $2 RETURNING #{fields};"
+			values: [
+				o.tid
+				o.fid
+			]
+		utils.pgqry query, (err, resp) ->
+			console.log err, resp
+			console.log err, resp
+			if err
+				cb(err)
+				return
+			if resp.rowCount is 0
 				utils.throwError(cb, "threadNotFound")
 				return
 			
-
-			resp = utils.dynamoConvertItem(resp)
-			
-			# An item was found and deleted.
-			#
-			# There are messages in the thread. Delete them too.
-
-			if resp.tm > 0
-				rsmq.sendMessage {qname: QUEUENAME, message: JSON.stringify({action: "dt", tid: o.tid, fid: o.fid})}, (err) ->
-					if err
-						cb(err)
-					return
 			# Delete the cache for this thread
-			memcached.del "#{mcprefix}#{o.tid}"
-			
-			if o.noupdate
-				# No need to update the forum counters
-				cb(null, resp)
-				return
+			memcached.del "#{mcprefix}#{o.fid}_#{o.tid}"
 
-			# Update the forum
-			forums.updateCounter {tm: -resp.tm, tt: -1, fid: resp.pid}, (err, respC) ->
-				if err
-					cb( err )
-					return
-					
-				cb(null, utils.threadPrepare(resp))
-				return
+			cb(null, utils.respPrepare(resp.rows[0]))
 			return
 		return
 
@@ -117,7 +99,7 @@ class Threads
 			
 			query =
 				name: "get thread"
-				text: "SELECT id, fid, a, top, v, tm, p FROM t where id = $1 and fid = $2"
+				text: "SELECT #{fields} FROM t where id = $1 and fid = $2"
 				values: [
 					o.tid
 					o.fid
@@ -153,16 +135,27 @@ class Threads
 				cb(err)
 				return
 
-			ts = o.ts or ts
-			query =
-				name: "insert thread"
-				text: "INSERT INTO t (fid, a, top, p) VALUES ($1, $2, $3, $4) RETURNING id, fid, a, top, v, tm, p;"
-				values: [
-					o.fid
-					o.a
-					o.top
-					utils.storeProps(o.p)
-				]
+			if o.ts
+				query =
+					name: "insert thread with ts"
+					text: "INSERT INTO t (id, fid, a, top, p) VALUES ($1, $2, $3, $4, $5) RETURNING #{fields};"
+					values: [
+						"T#{o.ts}"
+						o.fid
+						o.a
+						o.top
+						utils.storeProps(o.p)
+					]
+			else
+				query =
+					name: "insert thread without ts"
+					text: "INSERT INTO t (fid, a, top, p) VALUES ($1, $2, $3, $4) RETURNING #{fields};"
+					values: [
+						o.fid
+						o.a
+						o.top
+						utils.storeProps(o.p)
+					]
 
 
 			utils.pgqry query, (err, resp) ->
@@ -189,47 +182,48 @@ class Threads
 	# * `fid` (String) Forum Id
 	#
 	threadsByForum: (o, cb) ->
-		if utils.validate(o, ["fid"], cb) is false
+		if utils.validate(o, ["fid","esk"], cb) is false
 			return
-		params =
-			TableName: TABLENAME
-			Limit: 50
-			AttributesToGet: ["id", "a", "t", "v", "la", "lm", "tm", "p","top"]
-			KeyConditions:
-				pid:
-					ComparisonOperator: "EQ"
-					AttributeValueList: [
-						S: o.fid
-					]
-			ScanIndexForward: o.forward is "true"
-		if o.bylm is "true"
-			params.IndexName = "lastmsgdate"
-		if o.esk
-			params.ExclusiveStartKey =
-				"pid":
-					S: o.fid
-			if o.bylm is "true"
-				[eskid,esklm] = o.esk.split(":")
-				params.ExclusiveStartKey.id =
-					S: eskid
-				params.ExclusiveStartKey.lm =
-					S: esklm
-			else
-				params.ExclusiveStartKey.id =
-					S: o.esk
+
+		esk = ""
 		
-		utils.singlequery params, (err, resp) =>
+		if o.bylm is "true"
+			order = "ORDER BY lm"
+		else
+			order = "ORDER BY id"
+
+		if o.forward is "true"
+			order = order + " ASC"
+			comparer = ">"
+		else
+			order = order + " DESC"
+			comparer = ">"
+
+		if o.esk
+			if o.bylm is "true" 
+				esk = "AND lm #{comparer} $2"
+			else
+				esk = "AND id #{comparer} $2"
+
+		query =
+			text: "SELECT #{fields} FROM t WHERE fid = $1 #{order} LIMIT 50"
+			values: [
+				o.fid
+			]
+		
+		if o.esk
+			query.values.push(o.esk)
+
+		utils.pgqry query, (err, resp) =>
 			if err
 				cb(err)
 				return
-			if resp.length
-				lastitem = _.last(resp)
+			if resp.rowCount > 0
+				lastitem = _.last(resp.rows)
 				lastitem.lek = lastitem.id
-				if o.bylm is "true"
-					lastitem.lek = lastitem.lek + ":#{lastitem.lm}"
-				
+								
 
-			cb(null, utils.threadQueryPrepare(resp))
+			cb(null, utils.threadQueryPrepare(resp.rows))
 			return
 		return
 
@@ -241,33 +235,22 @@ class Threads
 	#
 	touch: (o, cb) ->
 		# No need to validate. Should not be called by itself anyway.
-		utils.getTimestamp (err, ts) ->
+		query =
+			name: "touch threads"
+			text: "UPDATE t SET v = base36_timestamp() WHERE id = $1 and fid = $2 RETURNING #{fields}"
+			values: [
+				o.tid
+				o.fid
+			]
+
+		utils.pgqry query, (err, resp) ->
 			if err
 				cb(err)
 				return
-			params =
-				TableName: TABLENAME
-				Key:
-					pid:
-						S: o.fid
-					id:
-						S: o.tid
-				AttributeUpdates:
-					v:
-						Value:
-							S: ts
-				ReturnValues: "ALL_NEW"
-				Expected:
-					pid:
-						ComparisonOperator: "NOT_NULL"
-					id:
-						ComparisonOperator: "NOT_NULL"
-			dynamodb.updateItem params, (err, data) ->
-				if err
-					cb(err)
-					return
-				_cacheAndReturn(data, cb)
+			if resp.rowCount is 0
+				utils.throwError(cb, "threadNotFound")
 				return
+			_cacheAndReturn(resp.rows[0], cb)
 			return
 		return
 

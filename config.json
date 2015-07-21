@@ -1,8 +1,7 @@
 {
-	"awsconfig": {
-		"region": "eu-central-1",
-		"apiVersion": "2012-08-10",
-		"sslEnabled": true
+	"db": {
+		"host": "172.31.16.97",
+		"name": "fcore"
 	},
 	"rsmq": {
 		"host": "172.31.20.0",

@@ -6,6 +6,8 @@ threads = null
 
 TABLENAME = "fcore"
 
+fields = ["id, tid, fid, a, p, cid"]
+
 class Messages
 	delete: (o, cb) ->
 		# TODO: Make sure to update the `la` key of a thread if the last message is deleted.
@@ -96,78 +98,89 @@ class Messages
 			if err
 				cb(err)
 				return
-			# Save the message
-			utils.getTimestamp (err, ts) ->
+			threads.get o, (err, resp) ->
 				if err
 					cb(err)
 					return
-				ts = o.ts or ts
-				o.mid = "M" + ts
-				threads.get o, (err, resp) ->
+				
+				if o.ts
+					query =
+						name: "insert msg with ts"
+						text: "INSERT INTO m (id, tid, fid, a, p, cid) VALUES ($1, $2, $3, $4, $5, $6) RETURNING #{fields};"
+						values: [
+							"M#{o.ts}"
+							o.fid
+							o.a
+							o.top
+							utils.storeProps(o.p)
+						]
+				else
+					query =
+						name: "insert msg without ts"
+						text: "INSERT INTO m (tid, fid, a, p, cid) VALUES ($1, $2, $3, $4) RETURNING #{fields};"
+						values: [
+							o.fid
+							o.a
+							o.top
+							utils.storeProps(o.p)
+						]
+				params =
+					TableName: TABLENAME
+					Item:
+						pid:
+							S: resp.id
+						id:
+							S: o.mid
+						a:
+							S: o.a
+						p:
+							S: utils.storeProps(o.p)
+						v:
+							S: ts
+						fid:
+							S: o.fid
+						cid:
+							S: user.cid
+					Expected:
+						pid:
+							ComparisonOperator: "NULL"
+						id:
+							ComparisonOperator: "NULL"
+				dynamodb.putItem params, (err, data) ->
 					if err
+						if err.message is "The conditional request failed"
+							utils.throwError(cb, "messageExists")
+							return
 						cb(err)
 						return
-					# Make sure to keep the `top` flag.
-					if resp.top
-						o.top = 1
-					params =
-						TableName: TABLENAME
-						Item:
-							pid:
-								S: resp.id
-							id:
-								S: o.mid
-							a:
-								S: o.a
-							p:
-								S: utils.storeProps(o.p)
-							v:
-								S: ts
-							fid:
-								S: o.fid
-							cid:
-								S: user.cid
-						Expected:
-							pid:
-								ComparisonOperator: "NULL"
-							id:
-								ComparisonOperator: "NULL"
-					dynamodb.putItem params, (err, data) ->
+					threads.updateCounter _.extend(o, {tm: 1}), (err, resp) ->
 						if err
 							if err.message is "The conditional request failed"
-								utils.throwError(cb, "messageExists")
+								utils.throwError(cb, "threadNotFound")
 								return
 							cb(err)
 							return
-						threads.updateCounter _.extend(o, {tm: 1}), (err, resp) ->
+						# We return the thread and the message
+						result = 
+							thread: resp
+
+						o.tid = result.thread.id
+						o.cid = user.cid
+						o.id = user.id
+						users.setAuthor o, (err, resp) ->
 							if err
-								if err.message is "The conditional request failed"
-									utils.throwError(cb, "threadNotFound")
-									return
 								cb(err)
 								return
-							# We return the thread and the message
-							result = 
-								thread: resp
 
-							o.tid = result.thread.id
-							o.cid = user.cid
-							o.id = user.id
-							users.setAuthor o, (err, resp) ->
+							result.message = params
+
+							_cacheAndReturn params, (err, resp) ->
 								if err
 									cb(err)
 									return
-
-								result.message = params
-
-								_cacheAndReturn params, (err, resp) ->
-									if err
-										cb(err)
-										return
-									result.message = resp
-									# For an insert we return the message AND the thread.
-									cb(null, result)
-									return
+								result.message = resp
+								# For an insert we return the message AND the thread.
+								cb(null, result)
 								return
 							return
 						return

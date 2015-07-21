@@ -238,6 +238,18 @@ class Utils
 								if not @isStringNumberBooleanNull(item)
 									@throwError(cb, "invalidValue", {msg:"`p.#{e}` has a forbidden type. Arrays may only contain strings, numbers, boolean and null."})
 									return false
+				when "esk"
+					if not o[item]?
+						return true
+					if not _.isString(o[item])
+						@throwError(cb, "invalidValue", {msg:"`#{item}` must be a string."})
+						return false
+					if not o[item].length is 9
+						@throwError(cb, "invalidValue", {msg:"`#{item}` must be 9 characters long"})
+						return false
+					if not _VALID.ts.test(o[item][1...])
+						@throwError(cb, "invalidValue", {msg:"`#{item}` must only contain [a-zA-Z0-9-]"})
+						return false
 				when "tpid"
 					if not o[item]?
 						@throwError(cb, "missingParameter", {item:item})
