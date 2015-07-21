@@ -19,20 +19,19 @@ class Forums
 	bycid: (o, cb) ->
 		if utils.validate(o, ["cid"], cb) is false
 			return
-		params =
-			TableName: TABLENAME
-			IndexName: "cid-index"
-			KeyConditions:
-				cid:
-					ComparisonOperator: "EQ"
-					AttributeValueList: [
-						S: o.cid
-					]
-		utils.multiquery params, (err, resp) ->
+		query =
+			name: "forums by cid"
+			text: "SELECT id, cid, v, p, tt, tm FROM f WHERE cid = $1"
+			values: [
+				o.cid
+			]
+
+
+		utils.pgqry query, (err, resp) ->
 			if err
 				cb(err)
 				return
-			cb(null, utils.forumQueryPrepare(resp))
+			cb(null, utils.forumQueryPrepare(resp.rows))
 			return
 		return
 
@@ -45,20 +44,19 @@ class Forums
 	bytpid: (o, cb) ->
 		if utils.validate(o, ["tpid"], cb) is false
 			return
-		params =
-			TableName: TABLENAME
-			IndexName: "tpid-index"
-			KeyConditions:
-				tpid:
-					ComparisonOperator: "EQ"
-					AttributeValueList: [
-						S: o.tpid
-					]
-		utils.multiquery params, (err, resp) ->
+		query =
+			name: "forums by tpid"
+			text: "SELECT id, cid, v, p, tt, tm FROM f WHERE tpid = $1"
+			values: [
+				o.tpid
+			]
+
+
+		utils.pgqry query, (err, resp) ->
 			if err
 				cb(err)
 				return
-			cb(null, utils.forumQueryPrepare(resp))
+			cb(null, utils.forumQueryPrepare(resp.rows))
 			return
 		return
 
@@ -100,38 +98,40 @@ class Forums
 	delete: (o, cb) ->
 		if utils.validate(o, ["fid"], cb) is false
 			return
-		params =
-			TableName: TABLENAME
-			Key:
-				id:
-					S: o.fid
-			ReturnValues: "ALL_OLD"
-		dynamodb.deleteItem params, (err, resp) ->
+		@get o, (err, forum) ->
 			if err
 				cb(err)
 				return
-			if not resp.Attributes?
-				utils.throwError(cb, "forumNotFound")
-				return
-
-			resp = utils.dynamoConvertItem(resp)
-			# An item was found and deleted.
-			#
-			# There are threads in the forum. Take care of them.
-			if resp.tt > 0
-				rsmq.sendMessage {qname: QUEUENAME, message: JSON.stringify({action: "df", fid: o.fid})}, (err, resp) ->
-					if err
-						console.error( err ) 
-					console.log "RSMQ DELETE FORUM", resp
-					return
-			# Delete the cache for this forum
-			memcached.del "#{mcprefix}#{o.fid}", (err) -> 
+			query =
+				name: "delete Forum"
+				text: "DELETE FROM f WHERE id = $1"
+				values: [
+					o.fid
+				]
+			utils.pgqry query, (err, resp) ->
 				if err
 					cb(err)
 					return
-				cb(null, utils.forumPrepare(resp))
+				if resp.rowCount is 0
+					utils.throwError(cb, "forumNotFound")
+					return
+				# An item was found and deleted.
+				#
+				# There are threads in the forum. Take care of them.
+				if forum.tt > 0
+					rsmq.sendMessage {qname: QUEUENAME, message: JSON.stringify({action: "df", fid: o.fid})}, (err, resp) ->
+						if err
+							console.error "ERROR trying to send RSMQ message", err
+						console.log "RSMQ DELETE FORUM", resp
+						return
+				# Delete the cache for this forum
+				memcached.del "#{mcprefix}#{o.fid}", (err) -> 
+					if err
+						cb(err)
+						return
+					cb(null, utils.respPrepare(forum))
+					return
 				return
-			return
 		return
 
 	get: (o, cb) ->
@@ -146,20 +146,22 @@ class Forums
 				# Cache hit
 				cb(null, resp)
 				return
-			# Not cached
-			params =
-				TableName: TABLENAME
-				Key:
-					id:
-						S: o.fid
-			dynamodb.getItem params, (err, data) ->
+			# Get the item from DB
+			query = 
+				name: "get forum by id"
+				text: "SELECT id, cid, v, p, tt, tm FROM f WHERE id = $1"
+				values: [
+					o.fid
+				]
+			utils.pgqry query, (err, data) ->
 				if err
 					cb(err)
 					return
-				if _.isEmpty(data)
+				if not data.rows.length 
 					utils.throwError(cb, "forumNotFound")
 					return
-				_cacheAndReturn(data, cb)
+
+				_cacheAndReturn(data.rows[0], cb)
 				return
 			return
 		return 
@@ -176,7 +178,8 @@ class Forums
 	# * `cid` (String) Community Id
 	#
 	insert: (o, cb) ->
-		if utils.validate(o, ["p","cid","ts"], cb) is false
+		that = @
+		if utils.validate(o, ["p","cid"], cb) is false
 			return
 
 		# Make sure this community exists
@@ -184,76 +187,23 @@ class Forums
 			if err
 				cb(err)
 				return
-			if not resp.id?
-				cb(null,{})
-				return
-			# Get a new id
-			utils.getTimestamp (err, ts) ->
+			query =
+				name: "insert forum"
+				text: "INSERT INTO f (cid, tpid, p) VALUES ($1, $2, $3) RETURNING id, cid, v, p, tt, tm;"
+				values: [
+					o.cid
+					o.cid.split("_")[0]
+					utils.storeProps(o.p)
+				]
+
+			utils.pgqry query, (err, resp) ->
 				if err
 					cb(err)
 					return
-				ts = o.ts or ts
-				params =
-					TableName: TABLENAME
-					Item:
-						id:
-							S: "F" + ts
-						p:
-							S: utils.storeProps(o.p)
-						cid:
-							S: o.cid
-						tpid:
-							S: o.cid.split("_")[0] # We derive the tpid from the community id.
-						v:
-							S: ts
-						tm:
-							N: "0"
-						tt:
-							N: "0"
-					Expected:
-						id:
-							ComparisonOperator: "NULL"
-						
-				dynamodb.putItem params, (err, data) ->
-					if err
-						cb(err)
-						return
-					_cacheAndReturn(params, cb)
+				if resp.rowCount isnt 1
+					utils.throwError(cb, "insertFailed")
 					return
-				return
-			return
-		return
-
-
-	# Touch the ts of a forum
-	# and flush the cache. Called by
-	#
-	# * threads.update
-	#
-	touch: (o, cb) ->
-		# No need to validate. Should not be called by itself anyway.
-		utils.getTimestamp (err, ts) ->
-			if err
-				cb(err)
-				return
-			params =
-				TableName: TABLENAME
-				Key:
-					id:
-						S: o.fid
-				AttributeUpdates:
-					v:
-						Value:
-							S: ts
-				ReturnValues: "ALL_NEW"
-				Expected:
-					id:
-						ComparisonOperator: "NOT_NULL"
-			dynamodb.updateItem params, (err, data) ->
-				if err
-					cb(err)
-					return
-				_cacheAndReturn(data, cb)
+				_cacheAndReturn(resp.rows[0], cb)
 				return
 			return
 		return
@@ -271,10 +221,14 @@ class Forums
 	update: (o, cb) ->
 		if utils.validate(o, ["fid","p","v"], cb) is false
 			return
-		
+		console.log "upd", o
 		@get o, (err, resp) ->
+			console.log "..sd.", err, resp
 			if err
 				cb(err)
+				return
+			if resp.v isnt o.v
+				utils.throwError(cb, "invalidVersion")
 				return
 
 			o.p = utils.cleanProps(resp.p, o.p)
@@ -285,40 +239,24 @@ class Forums
 			if _.isEqual(resp.p, o.p)
 				cb(null, resp)
 				return
-
-			utils.getTimestamp (err, ts) ->
+			
+			query =
+				name: "update forum"
+				text: "UPDATE f SET p = $1, v = base36_timestamp() WHERE id = $2 AND v = $3 RETURNING id, cid, v, p, tt, tm;"
+				values: [
+					JSON.stringify(o.p)
+					o.fid
+					o.v
+				]
+			
+			utils.pgqry query, (err, resp) ->
 				if err
 					cb(err)
 					return
-				params =
-					TableName: TABLENAME
-					Key:
-						id:
-							S: o.fid
-					AttributeUpdates:
-						p:
-							Value:
-								S: JSON.stringify(o.p)
-						v:
-							Value:
-								S: ts
-					Expected:
-						v:
-							ComparisonOperator: "EQ"
-							AttributeValueList: [{"S": o.v}]
-					ReturnValues: "ALL_NEW"
-				dynamodb.updateItem params, (err, data) ->
-					if err
-						if err.message is "The conditional request failed"
-							utils.throwError(cb, "invalidVersion")
-							return
-						cb(err)
-						return
-					# Saved the item
-					#
-					# Store the item in cache
-					_cacheAndReturn(data, cb)
+				if resp.rowCount is 0
+					utils.throwError(cb, "invalidVersion")
 					return
+				_cacheAndReturn(resp.rows[0], cb)
 				return
 			return
 		return
@@ -377,9 +315,8 @@ class Forums
 		return
 
 _cacheAndReturn = (data, cb) ->
-	data = utils.dynamoConvertItem(data)
 	key = "#{mcprefix}#{data.id}"
-	data = utils.forumPrepare(data)
+	data = utils.respPrepare(data)
 	if data.id
 		memcached.set key, data, 86400, ->
 	cb(null, data)

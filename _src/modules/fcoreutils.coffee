@@ -1,4 +1,7 @@
+config = require "../config.json"
 _ = require "lodash"
+pg = require "pg"
+conString = "postgres://postgres:aesu8Ju@#{config.db.host}/#{config.db.name}"
 
 LASTTIMESTAMP = 0
 
@@ -19,10 +22,10 @@ class Utils
 	
 	# Merge the hash and range key into a single `id` field
 	communityPrepare: (item) ->
-		if not item.id or not item.pid
-			return {}
-		item.id = "#{item.pid}_#{item.id}"
-		item.p = JSON.parse(item.p)
+		if item.id.length is 8
+			item.id = "#{item.pid}_#{item.id}"
+		if _.isString(item.p)
+			item.p = JSON.parse(item.p)
 		return _.omit(item, "pid")
 
 
@@ -42,15 +45,9 @@ class Utils
 
 	forumQueryPrepare: (items) ->
 		for e in items
-			@forumPrepare(e)
+			@respPrepare(e)
 
-	
-	forumPrepare: (item)->
-		if not item.id
-			return {}
-		item.p = JSON.parse(item.p)
-		return _.omit(item, "tpid")
-	
+
 	getRandomInt: (min, max) ->
 		return Math.floor(Math.random() * (max - min)) + min
 
@@ -86,8 +83,6 @@ class Utils
 
 
 	messagePrepare: (item)->
-		if not item.id
-			return {}
 		if item.p?
 			item.p = JSON.parse(item.p)
 		return _.omit(item, ["pid","fid","cid"])
@@ -112,6 +107,30 @@ class Utils
 		return
 
 
+	pgqry: (options, cb) ->
+		pg.connect conString, (err, client, done) ->
+			handleError = (err) ->
+				if not err
+					return false
+				done(client)
+				cb(err)
+				return true
+
+			client.query options, (err, result) ->
+				if handleError(err)
+					return
+				done()
+				cb(null, result)
+			return
+		return
+
+
+	respPrepare: (item)->
+		if _.isString(item.p)
+			item.p = JSON.parse(item.p)
+		return item
+
+
 	singlequery: (params, cb, result=[]) ->
 		dynamodb.query params, (err, resp) =>
 			if err
@@ -127,22 +146,12 @@ class Utils
 	storeProps: (p) ->
 		nullkeys = for key of p when p[key] is null
 			key
-		return JSON.stringify(_.omit(p, nullkeys))
+		JSON.stringify(_.omit(p, nullkeys))
 
 
 	threadQueryPrepare: (items) ->
 		for e in items
-			@threadPrepare(e)
-
-
-	threadPrepare: (item)->
-		if not item.id
-			return {}
-		if item.p?
-			item.p = JSON.parse(item.p)
-		if item.lm
-			item.lm = "M#{item.lm[-8..]}"
-		return _.omit(item, "pid")
+			@respPrepare(e)
 
 
 	throwError: (cb, err, data={}) ->
@@ -159,23 +168,9 @@ class Utils
 
 	userQueryPrepare: (items) ->
 		for e in items
-			@userPrepare(e)
+			@respPrepare(e)
 
 
-	# isolate the id
-	userPrepare: (item)->
-		if not item.id
-			return {}
-		if item.p?
-			item.p = JSON.parse(item.p)
-		if item.pid?
-			item.cid = item.pid # needed to users.setAuthor
-		return _.omit(item, "pid")
-
-
-	# return just id and userid
-	userExtIdPrepare: (item)->
-		return _.omit(item, "pid")
 
 
 	validate: (o, items, cb) ->
@@ -254,10 +249,10 @@ class Utils
 						@throwError(cb, "invalidValue", {msg:"`#{item}` must only contain [a-zA-Z0-9-]"})
 						return false
 				when "top"
-					if o[item]
+					if o[item] and parseInt(o[item],2)
 						o[item] = 1
 					else
-						o[item] = null
+						o[item] = 0
 				when "ts"
 					if o[item]?
 						if not _VALID.ts.test(o[item])
@@ -289,6 +284,7 @@ ERRORS =
 	"threadNotFound": "Thread not found"
 	"externalIdNotUnique": "External Id not unique"
 	"communityHasForums": "Community still has forums"
+	"insertFailed": "DB insert failed"
 
 
 _ERRORS = {}

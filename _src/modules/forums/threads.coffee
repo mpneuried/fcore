@@ -105,7 +105,7 @@ class Threads
 	get: (o, cb) ->
 		if utils.validate(o, ["tid","fid"], cb) is false
 			return
-		key = "#{mcprefix}#{o.tid}"
+		key = "#{mcprefix}#{o.fid}_#{o.tid}"
 		memcached.get key, (err, resp) ->
 			if err
 				cb(err)
@@ -114,22 +114,23 @@ class Threads
 				# Cache hit
 				cb(null, resp)
 				return
-			# Not cached
-			params =
-				TableName: TABLENAME
-				Key:
-					pid:
-						S: o.fid
-					id:
-						S: o.tid
-			dynamodb.getItem params, (err, data) ->
+			
+			query =
+				name: "get thread"
+				text: "SELECT id, fid, a, top, v, tm, p FROM t where id = $1 and fid = $2"
+				values: [
+					o.tid
+					o.fid
+				]
+				
+			utils.pgqry query, (err, resp) ->
 				if err
 					cb(err)
 					return
-				if _.isEmpty(data)
+				if resp.rowCount is 0
 					utils.throwError(cb, "threadNotFound")
 					return
-				_cacheAndReturn(data, cb)
+				_cacheAndReturn(resp.rows[0], cb)
 				return
 			return
 		return
@@ -151,52 +152,31 @@ class Threads
 			if err
 				cb(err)
 				return
-			utils.getTimestamp (err, ts) ->
+
+			ts = o.ts or ts
+			query =
+				name: "insert thread"
+				text: "INSERT INTO t (fid, a, top, p) VALUES ($1, $2, $3, $4) RETURNING id, fid, a, top, v, tm, p;"
+				values: [
+					o.fid
+					o.a
+					o.top
+					utils.storeProps(o.p)
+				]
+
+
+			utils.pgqry query, (err, resp) ->
 				if err
+					if err.detail.indexOf("already exists") > -1
+						utils.throwError(cb, "threadExists")
+						return
 					cb(err)
 					return
-				ts = o.ts or ts
-				params =
-					TableName: TABLENAME
-					Item:
-						pid:
-							S: o.fid
-						id:
-							S: "T" + ts
-						p:
-							S: utils.storeProps(o.p)
-						a:
-							S: o.a
-						v:
-							S: o.ts or ts
-						tm:
-							N: "0"
-					Expected:
-						pid:
-							ComparisonOperator: "NULL"
-						id:
-							ComparisonOperator: "NULL"
-				# Only add the `sticky` flag when it's there
-				if o.top
-					params.Item.top = 
-						N: "1"
 
-				dynamodb.putItem params, (err, data) ->
-					if err
-						if err.message is "The conditional request failed"
-							utils.throwError(cb, "threadExists")
-							return
-						cb(err)
-						return
-					o.tm = 0
-					o.tt = 1
-					forums.updateCounter o, (err, resp) ->
-						if err
-							cb(err)
-							return
-						_cacheAndReturn(params, cb)
-						return
+				if resp.rowCount isnt 1
+					utils.throwError(cb, "insertFailed")
 					return
+				_cacheAndReturn(resp.rows[0], cb)
 				return
 			return
 		return
@@ -487,9 +467,8 @@ _stickyUnchanged = (resp, o) ->
 
 
 _cacheAndReturn = (data, cb) ->
-	data = utils.dynamoConvertItem(data)
-	key = "#{mcprefix}#{data.id}"
-	data = utils.threadPrepare(data)
+	key = "#{mcprefix}#{data.fid}_#{data.id}"
+	data = utils.respPrepare(data)
 	if data.id
 		memcached.set key, data, 86400, ->
 	cb(null, data)

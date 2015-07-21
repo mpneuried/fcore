@@ -39,30 +39,6 @@ class Users
 		return
 
 
-	delete: (o, cb) ->
-		if utils.validate(o, ["id","cid"], cb) is false
-			return
-		key = "#{mcprefix}#{o.cid}_#{o.id}"
-		console.log "DELETING A USER NOW..."
-		params =
-			TableName: TABLENAME
-			Key:
-				pid:
-					S: o.cid
-				id:
-					S: o.id
-			Expected:
-				v:
-					ComparisonOperator: "EQ"
-					AttributeValueList: [{"S": o.v}]
-			ReturnValues: "ALL_OLD"
-		dynamodb.deleteItem params, (err, resp) ->
-			if err
-				cb(err)
-				return
-		cb(null, true)
-		return
-
 	get: (o, cb) ->
 		if utils.validate(o, ["id","cid"], cb) is false
 			return
@@ -75,27 +51,24 @@ class Users
 				# Cache hit
 				cb(null, resp)
 				return
-			# Not cached
-
-			# We need a consistent read as this will be stored in the cache.
-			# When a read happens after a write if might not return the latest
-			# value when not using consistent reads.
-			params = 
-				TableName: TABLENAME
-				ConsistentRead: true
-				Key:
-					pid:
-						S: o.cid
-					id:
-						S: o.id
-			dynamodb.getItem params, (err, user) ->
+			# Get the item from DB
+			query = 
+				name: "get user by id"
+				text: "SELECT id, cid, c, v, p, extid FROM u WHERE id = $1 and cid = $2"
+				values: [
+					o.id
+					o.cid
+				]
+			utils.pgqry query, (err, resp) ->
 				if err
 					cb(err)
 					return
-				if _.isEmpty(user)
+				# Make sure the supplied pid is the same
+				if not resp.rows.length 
 					utils.throwError(cb, "userNotFound")
 					return
-				_cacheAndReturn(user, cb)
+
+				_cacheAndReturn(resp.rows[0], cb)
 				return
 			return
 		return 
@@ -113,31 +86,23 @@ class Users
 				# Cache hit
 				cb(null, resp)
 				return
-			# Not cached
-
-			# We need a consistent read as this will be stored in the cache.
-			# When a read happens after a write if might not return the latest
-			# value when not using consistent reads.
-			params = 
-				TableName: TABLENAME
-				ConsistentRead: true
-				Key:
-					pid:
-						S: "#{o.cid}_extid"
-					id:
-						S: o.extid
-			dynamodb.getItem params, (err, user) ->
-				console.log err, user
+			# Get the item from DB
+			query = 
+				name: "get forum by id"
+				text: "SELECT id, cid, c, v, p, extid FROM u WHERE extid = $1 and cid = $2"
+				values: [
+					o.extid
+					o.cid
+				]
+			utils.pgqry query, (err, data) ->
 				if err
 					cb(err)
 					return
-				if _.isEmpty(user)
+				if not data.rows.length 
 					utils.throwError(cb, "externalIdNotFound")
 					return
-				
-				data = utils.dynamoConvertItem(user)
-				data = utils.userExtIdPrepare(data)
-				cb(null, data)
+
+				_cacheAndReturn(data.rows[0], cb)
 				return
 			return
 		return
@@ -151,6 +116,7 @@ class Users
 	# * `p` (Object) Properties.
 	#
 	insert: (o, cb) ->
+		that = @
 		# if `id` is not supplied we generate an id.
 		_preCheckUserId o, (err, o) =>
 			if err
@@ -170,52 +136,27 @@ class Users
 					if err
 						cb(err)
 						return
-					if not resp.id?
-						cb(null,{})
-						return
-					# Get a new id
-					utils.getTimestamp (err, ts) ->
+
+					query =
+						name: "insert user"
+						text: "INSERT INTO u (id, cid, p, extid) VALUES ($1, $2, $3, $4) RETURNING id, cid, c, v, p, extid;"
+						values: [
+							o.id,
+							o.cid
+							utils.storeProps(o.p)
+							o.extid or null
+						]
+					utils.pgqry query, (err, resp) ->
 						if err
+							if err.detail.indexOf("already exists") > -1
+								utils.throwError(cb, "userExists")
+								return
 							cb(err)
 							return
-						params =
-							TableName: TABLENAME
-							Item:
-								pid:
-									S: o.cid
-								id:
-									S: o.id
-								p:
-									S: utils.storeProps(o.p)
-								c:
-									S: ts
-								v:
-									S: ts
-							Expected:
-								pid:
-									ComparisonOperator: "NULL"
-								id:
-									ComparisonOperator: "NULL"
-						if o.extid?
-							params.Item.extid =
-								S: o.extid
-						dynamodb.putItem params, (err, data) ->
-							if err
-								if err.message is "The conditional request failed"
-									utils.throwError(cb, "userExists")
-									return
-								cb(err)
-								return
-							if o.extid?
-								_setExtId o.cid, null, o.extid, o.id, (err, resp) ->
-									if err
-										cb(err)
-										return
-									_cacheAndReturn(params, cb)
-									return
-							else
-								_cacheAndReturn(params, cb)
+						if resp.rowCount isnt 1
+							utils.throwError(cb, "insertFailed")
 							return
+						_cacheAndReturn(resp.rows[0], cb)
 						return
 					return
 				return
@@ -298,14 +239,15 @@ class Users
 	# * `cid` (String) Community Id
 	# * `mid` (String) Message Id
 	removeAuthor: (o, cb) ->
-		params =
-			TableName: TABLENAME
-			Key:
-				pid:
-					S: "#{o.cid}_#{o.a.toLowerCase()}"
-				id: 
-					S: o.id
-		dynamodb.deleteItem params, (err, resp) ->
+		query =
+			name: "removeAuthor"
+			text: "DELETE FROM authors WHERE cid = $1 and uid = $2 AND mid = $3"
+			values: [
+				o.cid
+				o.id
+				o.mid
+			]
+		utils.pgqry query, (err, resp) ->
 			if err
 				cb(err)
 				return
@@ -327,18 +269,17 @@ class Users
 	# * `mid` (String) Message Id
 
 	setAuthor: (o, cb) ->
-		params =
-			TableName: TABLENAME
-			Item:
-				pid:
-					S: "#{o.cid}_#{o.id}"
-				id: 
-					S: o.mid
-				fid:
-					S: o.fid
-				tid:
-					S: o.tid
-		dynamodb.putItem params, (err, data) ->
+		query =
+			name: "setAuthor"
+			text: "INSERT INTO authors (cid, uid, mid, fid, tid) VALUES ($1, $2, $3, $4, $5)"
+			values: [
+				o.cid
+				o.id
+				o.mid
+				o.fid
+				o.tid
+			]
+		utils.pgqry query, (err, data) ->
 			if err
 				cb(err)
 				return
@@ -366,20 +307,17 @@ class Users
 			if err
 				cb(err)
 				return
-			if not user.id?
-				cb(null, {})
+				
+			if user.v isnt o.v
+				utils.throwError(cb, "invalidVersion")
 				return
 
 			o.p = utils.cleanProps(user.p, o.p)
 			if utils.validate(o, ["p"], cb) is false
 				return
 
-			if user.extid and o.extid and user.extid is o.extid
-				console.log "extid did not change. REMOVED FROM OBJECT"
-				o = _.omit(o, "extid")
-
 			# Nothing changed. Bail out and return the current item.
-			if _.isEqual(user.p, o.p) and (o.extid is undefined or (o.extid is null and not user.extid)) 
+			if _.isEqual(user.p, o.p) and o.extid is user.extid
 				cb(null, user)
 				return
 
@@ -394,70 +332,31 @@ class Users
 					cb(err)
 					return
 
-
-
-
 				# Make sure this community exists
 				communities.get {cid: o.cid}, (err, resp) ->
 					if err
 						cb(err)
 						return
-					if not resp.id?
-						cb(null,{})
-						return
-					utils.getTimestamp (err, ts) ->
+					
+					query =
+						name: "user update with extid"
+						text: "UPDATE u SET p = $1, v = base36_timestamp(), extid = $2 WHERE id = $3 and cid = $4 and v = $5 RETURNING id, cid, c, v, p, extid;"
+						values: [
+							JSON.stringify(o.p)
+							o.extid
+							o.id
+							o.cid
+							o.v
+						]
+
+					utils.pgqry query, (err, resp) ->
 						if err
 							cb(err)
 							return
-						params =
-							TableName: TABLENAME
-							Key:
-								pid:
-									S: o.cid
-								id:
-									S: o.id
-							AttributeUpdates:
-								p:
-									Value:
-										S: JSON.stringify(o.p)
-									Action: "PUT"
-								v:
-									Value:
-										S: ts
-									Action: "PUT"
-							Expected:
-								v:
-									ComparisonOperator: "EQ"
-									AttributeValueList: [{"S": o.v}]
-
-							ReturnValues: "ALL_NEW"
-						# Add the extid to the update
-						if o.extid
-							params.AttributeUpdates.extid =
-								Value:
-									S: o.extid
-								Action: "PUT"
-						if o.extid is null
-							params.AttributeUpdates.extid =
-								Action: "DELETE"
-						dynamodb.updateItem params, (err, data) ->
-							if err
-								if err.message is "The conditional request failed"
-									utils.throwError(cb, "invalidVersion")
-									return
-								cb(err)
-								return
-							if o.extid?
-								oldextid = user.extid or null
-								_setExtId o.cid, oldextid, o.extid, o.id, (err, resp) ->
-									if err
-										cb(err)
-										return
-									_cacheAndReturn(data, cb)
-									return
-							else
-								_cacheAndReturn(data, cb)
+						if resp.rowCount is 0
+							utils.throwError(cb, "invalidVersion")
 							return
+						_cacheAndReturn(resp.rows[0], cb)
 						return
 					return
 				return
@@ -465,40 +364,35 @@ class Users
 		return
 
 	
-	# Get hte Users of a community
+	# Get the Users of a community
 	#
 	# Parameters:
 	# 
-	# * `cid` (String) Community id
-	# * `esk` (optional, string, `Mhx123abc`) ... Exclusive Start Key  
-    
+    # + cid (required, string, `123456_hxfu1234`) ... The id of the community.
+    # + type (optional, string, `id`) ... Either `id`, `p` or `all` to return just the id, properties or all. Default: `id`
+    # + esk (optional, string, `someusername`) ... Exclusive Start Key
 	#
 	users: (o, cb) ->
+		tovalidate = ["cid","type"]
 		o.type = o.type or "id"
-		if utils.validate(o, ["cid","type"], cb) is false
+		# Turn the `esk` key into an user id
+		o.id = o.esk or ""
+		if o.id
+			tovalidate.push("id")
+		if utils.validate(o, tovalidate, cb) is false
 			return
-		params =
-			TableName: TABLENAME
-			AttributesToGet: o.type
-			Limit: 100
-			KeyConditions:
-				pid:
-					ComparisonOperator: "EQ"
-					AttributeValueList: [
-						S: o.cid
-					]
-		if o.esk
-			params.ExclusiveStartKey =
-				"id":
-					S: o.esk
-				"pid":
-					S: o.cid
-
-		utils.singlequery params, (err, resp) ->
+		query =
+			name: "users of community #{o.type.join(",")}"
+			text: "SELECT #{o.type.join(",")} FROM u WHERE cid = $1 and id > $2 LIMIT 100"
+			values: [
+				o.cid
+				o.id
+			]
+		utils.pgqry query, (err, resp) ->
 			if err
 				cb(err)
 				return
-			cb(null, utils.userQueryPrepare(resp))
+			cb(null, utils.userQueryPrepare(resp.rows))
 			return
 		return
 
@@ -526,26 +420,10 @@ class Users
 
 
 _cacheAndReturn = (data, cb) ->
-	data = utils.dynamoConvertItem(data)
-	key = "#{mcprefix}#{data.pid}_#{data.id}"
-	data = utils.userPrepare(data)
+	key = "#{mcprefix}#{data.cid}_#{data.id}"
+	data = utils.respPrepare(data)
 	memcached.set key, data, 86400, ->
 	cb(null, data)
-	return
-
-
-_deleteExtId = (cid, extid, cb) ->
-	if not extid?
-		cb(null, true)
-		return
-	params =
-		TableName: TABLENAME
-		Key:
-			pid:
-				S: "#{cid}_extid"
-			id: 
-				S: extid
-	dynamodb.deleteItem(params, cb)
 	return
 
 
@@ -563,40 +441,6 @@ _preCheckUserId = (o, cb) ->
 		return
 	return
 
-
-# Set External Id of a User
-#
-_setExtId = (cid, oldextid, newextid, userid, cb) ->
-
-	if oldextid
-		_deleteExtId cid, oldextid, (err, resp) ->
-			if err
-				cb(err)
-				return
-			_setNewExtId(cid, newextid, userid, cb)	
-			return
-		return
-	_setNewExtId(cid, newextid, userid, cb)	
-	return
-
-
-_setNewExtId = (cid, newextid, userid, cb) ->
-	params =
-		TableName: TABLENAME
-		Item:
-			pid:
-				S: "#{cid}_extid"
-			id: 
-				S: newextid
-			userid:
-				S: userid
-	dynamodb.putItem(params, cb)
-	return
-
-
-_updCheckExtId = () ->
-
-	return
 
 module.exports = new Users()
 

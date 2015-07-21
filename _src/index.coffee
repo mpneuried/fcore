@@ -30,10 +30,6 @@ root.memcached = new Memcached(config.memcached)
 RedisSMQ = require "rsmq"
 root.rsmq = new RedisSMQ(config.rsmq)
 
-
-AWS = require "aws-sdk"
-root.dynamodb = new AWS.DynamoDB(config.awsconfig)
-
 long_cache = 24 * 3600 * 1000 * 90 # 90 days
 
 app = express()

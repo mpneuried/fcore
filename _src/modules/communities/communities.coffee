@@ -15,19 +15,17 @@ class Communities
 	bytpid: (o, cb) ->
 		if utils.validate(o, ["tpid"], cb) is false
 			return
-		params =
-			TableName: TABLENAME
-			KeyConditions:
-				pid:
-					ComparisonOperator: "EQ"
-					AttributeValueList: [
-						S: o.tpid
-					]
-		utils.multiquery params, (err, resp) ->
+		query = 
+			name: "communities by tpid"
+			text: "SELECT id, pid, v, p FROM c WHERE pid = $1"
+			values: [
+				o.tpid
+			]
+		utils.pgqry query, (err, resp) ->
 			if err
 				cb(err)
 				return
-			cb(null, utils.communityQueryPrepare(resp))
+			cb(null, utils.communityQueryPrepare(resp.rows))
 			return
 		return
 
@@ -107,23 +105,24 @@ class Communities
 				# Cache hit
 				cb(null, resp)
 				return
-			
-			# Not cached
-			params = 
-				TableName: TABLENAME
-				Key:
-					pid:
-						S: o.cid.split("_")[0]
-					id:
-						S: o.cid.split("_")[1]
-			dynamodb.getItem params, (err, data) ->
+			[pid, id] = o.cid.split("_")
+			# Get the item from DB
+			query = 
+				name: "get community by id"
+				text: "SELECT id, pid, v, p FROM c WHERE id = $1"
+				values: [
+					id
+				]
+			utils.pgqry query, (err, data) ->
 				if err
 					cb(err)
 					return
-				if _.isEmpty(data)
+				# Make sure the supplied pid is the same
+				if not data.rows.length or data.rows[0].pid isnt pid
 					utils.throwError(cb, "communityNotFound")
 					return
-				_cacheAndReturn(data, cb)
+
+				_cacheAndReturn(data.rows[0], cb)
 				return
 			return
 		return 
@@ -137,36 +136,24 @@ class Communities
 	# * `p` (Object) Properties.
 	#
 	insert: (o, cb) ->
+		that = @
 		if utils.validate(o, ["tpid","p"], cb) is false
 			return
-		# Get a new id
-		utils.getTimestamp (err, ts) ->
+		query =
+			name: "insert community"
+			text: "INSERT INTO c (pid, p) VALUES ($1, $2) RETURNING id, pid, v, p;"
+			values: [
+				o.tpid
+				utils.storeProps(o.p)
+			]
+		utils.pgqry query, (err, resp) ->
 			if err
 				cb(err)
 				return
-			params =
-				TableName: TABLENAME
-				Item:
-					pid:
-						S: o.tpid
-					id:
-						S: ts
-					p:
-						S: utils.storeProps(o.p)
-					v:
-						S: ts
-				Expected:
-					pid:
-						ComparisonOperator: "NULL"
-					id:
-						ComparisonOperator: "NULL"
-			dynamodb.putItem params, (err, data) ->
-				if err
-					cb(err)
-					return
-				# Saved the item
-				_cacheAndReturn(params, cb)
+			if resp.rowCount isnt 1
+				utils.throwError(cb, "insertFailed")
 				return
+			_cacheAndReturn(resp.rows[0], cb)
 			return
 		return
 
@@ -180,72 +167,54 @@ class Communities
 	# * `v` (Number) The current version number must be supplied for a successful update.
 	#
 	update: (o, cb) ->
+		that = @
 		if utils.validate(o, ["cid","p","v"], cb) is false
 			return
-		@get o, (err, resp) ->
+		@get o, (err, data) ->
 			if err
 				cb(err)
 				return
-
-			if not resp.id?
-				cb(null, {})
+			if data.v isnt o.v
+				utils.throwError(cb, "invalidVersion")
 				return
-			o.p = utils.cleanProps(resp.p, o.p)
+
+			o.p = utils.cleanProps(data.p, o.p)
 			if utils.validate(o, ["p"], cb) is false
 				return
 
 			# Nothing changed. Bail out and return the current item.
-			if _.isEqual(resp.p, o.p)
-				cb(null, resp)
+			if _.isEqual(data.p, o.p)
+				cb(null, data)
 				return
+			id = o.cid.split("_")[1]
+			query =
+				name: "update community"
+				text: "UPDATE c SET v = get_unique_ts(), p = $1 WHERE id = $2 and v = $3 RETURNING id, pid, v, p"
+				values: [
+					JSON.stringify(o.p)
+					id
+					o.v
+				]
 
-			utils.getTimestamp (err, ts) ->
+			utils.pgqry query, (err, resp) ->
 				if err
 					cb(err)
 					return
-				params =
-					TableName: TABLENAME
-					Key:
-						pid:
-							S: o.cid.split("_")[0]
-						id:
-							S: o.cid.split("_")[1]
-					AttributeUpdates:
-						p:
-							Value:
-								S: JSON.stringify(o.p)
-							Action: "PUT"
-						v:
-							Value:
-								S: ts
-							Action: "PUT"
-					Expected:
-						v:
-							ComparisonOperator: "EQ"
-							AttributeValueList: [{"S": o.v}]
-					ReturnValues: "ALL_NEW"
-
-				dynamodb.updateItem params, (err, data) ->
-					if err
-						if err.message is "The conditional request failed"
-							utils.throwError(cb, "invalidVersion")
-							return
-						cb(err)
-						return
-					# Saved the item
-					_cacheAndReturn(data, cb)
+				if resp.rowCount is 0
+					utils.throwError(cb, "invalidVersion")
 					return
+				_cacheAndReturn(resp.rows[0], cb)
 				return
 			return
 		return
 
 
 _cacheAndReturn = (data, cb) ->
-	data = utils.dynamoConvertItem(data)
 	key = "#{mcprefix}#{data.pid}_#{data.id}"
 	data = utils.communityPrepare(data)
 	memcached.set key, data, 86400, ->
 	cb(null, data)
 	return
+
 
 module.exports = new Communities()
