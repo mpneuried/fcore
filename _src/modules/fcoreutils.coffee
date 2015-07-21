@@ -216,7 +216,7 @@ class Utils
 						@throwError(cb, "invalidValue", {msg:"`#{item}` must be a string"})
 						return false
 					if not _VALID.id.test(o[item])
-						@throwError(cb, "invalidValue", {msg:"`#{item}` must only contain [a-zA-Z0-9-_] and must be 3-24 characters long"})
+						@throwError(cb, "invalidValue", {msg:"`#{item}` must only contain [a-zA-Z0-9-_] and must be 3-32 characters long"})
 						return false
 					# User Ids should be lowercase
 					if item is "id"
