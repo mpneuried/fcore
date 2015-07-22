@@ -125,7 +125,7 @@ class Forums
 						console.log "RSMQ DELETE FORUM", resp
 						return
 				# Delete the cache for this forum
-				memcached.del "#{mcprefix}#{o.fid}", (err) -> 
+				memcached.del _mckey(o), (err) -> 
 					if err
 						cb(err)
 						return
@@ -134,11 +134,21 @@ class Forums
 				return
 		return
 
+
+	flush: (o, cb) ->
+		memcached.del _mckey(o), (err) ->
+			if err
+				cb(err)
+				return
+			cb(null, true)
+			return
+		return
+
+
 	get: (o, cb) ->
 		if utils.validate(o, ["fid"], cb) is false
 			return
-		key = "#{mcprefix}#{o.fid}"
-		memcached.get key, (err, resp) ->
+		memcached.get _mckey({id: o.fid}), (err, resp) ->
 			if err
 				cb(err)
 				return
@@ -221,7 +231,6 @@ class Forums
 	update: (o, cb) ->
 		if utils.validate(o, ["fid","p","v"], cb) is false
 			return
-		console.log "upd", o
 		@get o, (err, resp) ->
 			console.log "..sd.", err, resp
 			if err
@@ -315,13 +324,14 @@ class Forums
 		return
 
 _cacheAndReturn = (data, cb) ->
-	key = "#{mcprefix}#{data.id}"
 	data = utils.respPrepare(data)
 	if data.id
-		memcached.set key, data, 86400, ->
+		memcached.set _mckey(data), data, 86400, (err,resp) ->
 	cb(null, data)
 	return
 
+_mckey = (o) ->
+	return "#{mcprefix}#{o.id}"
 
 module.exports = new Forums()
 

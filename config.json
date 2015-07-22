@@ -4,11 +4,11 @@
 		"name": "fcore"
 	},
 	"rsmq": {
-		"host": "172.31.20.0",
+		"host": "127.0.0.1",
 		"port": 6379,
 		"ns": "fcorersmq"
 	},
-	"memcached": ["172.31.20.0:11211"],
+	"memcached": ["127.0.0.1:11211"],
 	"port": 8080
 
 }

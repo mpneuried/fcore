@@ -5,7 +5,7 @@ mcprefix = "fc_u"
 forums = null
 communities = null
 
-TABLENAME = "fcore"
+FIELDS = "id, cid, c, v, p, extid"
 
 class Users
 
@@ -54,7 +54,7 @@ class Users
 			# Get the item from DB
 			query = 
 				name: "get user by id"
-				text: "SELECT id, cid, c, v, p, extid FROM u WHERE id = $1 and cid = $2"
+				text: "SELECT #{FIELDS} FROM u WHERE id = $1 and cid = $2"
 				values: [
 					o.id
 					o.cid
@@ -89,7 +89,7 @@ class Users
 			# Get the item from DB
 			query = 
 				name: "get forum by id"
-				text: "SELECT id, cid, c, v, p, extid FROM u WHERE extid = $1 and cid = $2"
+				text: "SELECT #{FIELDS} FROM u WHERE extid = $1 and cid = $2"
 				values: [
 					o.extid
 					o.cid
@@ -139,7 +139,7 @@ class Users
 
 					query =
 						name: "insert user"
-						text: "INSERT INTO u (id, cid, p, extid) VALUES ($1, $2, $3, $4) RETURNING id, cid, c, v, p, extid;"
+						text: "INSERT INTO u (id, cid, p, extid) VALUES ($1, $2, $3, $4) RETURNING #{FIELDS};"
 						values: [
 							o.id,
 							o.cid
@@ -340,7 +340,7 @@ class Users
 					
 					query =
 						name: "user update with extid"
-						text: "UPDATE u SET p = $1, v = base36_timestamp(), extid = $2 WHERE id = $3 and cid = $4 and v = $5 RETURNING id, cid, c, v, p, extid;"
+						text: "UPDATE u SET p = $1, v = base36_timestamp(), extid = $2 WHERE id = $3 and cid = $4 and v = $5 RETURNING #{FIELDS};"
 						values: [
 							JSON.stringify(o.p)
 							o.extid

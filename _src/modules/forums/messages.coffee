@@ -4,15 +4,21 @@ _ = require "lodash"
 users = null
 threads = null
 
-TABLENAME = "fcore"
-
-fields = ["id, tid, fid, a, p, cid"]
+FIELDS = ["id, tid, fid, a, p, v, cid"]
 
 class Messages
 	delete: (o, cb) ->
 		# TODO: Make sure to update the `la` key of a thread if the last message is deleted.
 		if utils.validate(o, ["fid","tid","mid"], cb) is false
 			return
+		query =
+			name: "delete msg"
+			text: "DELETE FROM m WHERE fid = $1 AND tid = $2 AND id = $3 RETURNING #{FIELDS};"
+			values: [
+				o.fid
+				o.tid
+				o.mid
+			]
 		params =
 			TableName: TABLENAME
 			Key:
@@ -98,7 +104,7 @@ class Messages
 			if err
 				cb(err)
 				return
-			threads.get o, (err, resp) ->
+			threads.get o, (err) ->
 				if err
 					cb(err)
 					return
@@ -106,80 +112,58 @@ class Messages
 				if o.ts
 					query =
 						name: "insert msg with ts"
-						text: "INSERT INTO m (id, tid, fid, a, p, cid) VALUES ($1, $2, $3, $4, $5, $6) RETURNING #{fields};"
+						text: "INSERT INTO m (id, tid, fid, a, p, cid) VALUES ($1, $2, $3, $4, $5, $6) RETURNING #{FIELDS};"
 						values: [
 							"M#{o.ts}"
+							o.tid
 							o.fid
 							o.a
-							o.top
 							utils.storeProps(o.p)
+							user.cid
 						]
 				else
 					query =
 						name: "insert msg without ts"
-						text: "INSERT INTO m (tid, fid, a, p, cid) VALUES ($1, $2, $3, $4) RETURNING #{fields};"
+						text: "INSERT INTO m (tid, fid, a, p, cid) VALUES ($1, $2, $3, $4, $5) RETURNING #{FIELDS};"
 						values: [
+							o.tid
 							o.fid
 							o.a
-							o.top
 							utils.storeProps(o.p)
+							user.cid
 						]
-				params =
-					TableName: TABLENAME
-					Item:
-						pid:
-							S: resp.id
-						id:
-							S: o.mid
-						a:
-							S: o.a
-						p:
-							S: utils.storeProps(o.p)
-						v:
-							S: ts
-						fid:
-							S: o.fid
-						cid:
-							S: user.cid
-					Expected:
-						pid:
-							ComparisonOperator: "NULL"
-						id:
-							ComparisonOperator: "NULL"
-				dynamodb.putItem params, (err, data) ->
+
+				utils.pgqry query, (err, data) ->
 					if err
-						if err.message is "The conditional request failed"
-							utils.throwError(cb, "messageExists")
+						if err.detail.indexOf("already exists") > -1
+							utils.throwError(cb, "threadExists")
 							return
 						cb(err)
 						return
-					threads.updateCounter _.extend(o, {tm: 1}), (err, resp) ->
+					msg = data.rows[0]
+					threads.get _.extend(o, {nocache:1}), (err, thread) ->
 						if err
-							if err.message is "The conditional request failed"
-								utils.throwError(cb, "threadNotFound")
-								return
 							cb(err)
 							return
 						# We return the thread and the message
 						result = 
-							thread: resp
+							thread: thread
 
-						o.tid = result.thread.id
 						o.cid = user.cid
 						o.id = user.id
+						o.mid = msg.id
 						users.setAuthor o, (err, resp) ->
 							if err
 								cb(err)
 								return
 
-							result.message = params
-
-							_cacheAndReturn params, (err, resp) ->
+							_cacheAndReturn msg, (err, resp) ->
 								if err
 									cb(err)
 									return
 								result.message = resp
 								# For an insert we return the message AND the thread.
+								
 								cb(null, result)
 								return
 							return
@@ -205,42 +189,43 @@ class Messages
 		if o.limit > 50
 			o.limit = 50
 
-		if utils.validate(o, ["fid","tid"], cb) is false
+		if utils.validate(o, ["fid","tid","esk"], cb) is false
 			return
-		params = 
-			TableName: TABLENAME
-			Limit: o.limit
-			ConsistentRead: o.limit is 1
-			AttributesToGet: ["id", "a", "b", "v", "la", "p"]
-			KeyConditions:
-				pid:
-					ComparisonOperator: "EQ"
-					AttributeValueList: [
-						S: o.tid
-					]
-			QueryFilter:
-				fid:
-					ComparisonOperator: "EQ"
-					AttributeValueList: [
-						S: o.fid
-					]
-			ScanIndexForward: o.forward is "true"
+
+		esk = ""
+		order = "DESC"
+		comparer = "<"
+
+		if o.forward is "true"
+			 order = "ASC"
+			 comparer = ">"
+
 		if o.esk
-			params.ExclusiveStartKey =
-				"id":
-					S: o.esk
-				"pid":
-					S: o.tid
-		utils.singlequery params, (err, resp) ->
+			esk = "AND id #{comparer} $4"
+
+		query =
+			name: "messages by thread"
+			text: "SELECT #{FIELDS} FROM m WHERE fid = $1 and tid = $2 ORDER BY ID #{ORDER} LIMIT $3"
+			values: [
+				o.fid
+				o.tid
+				o.limit
+			]
+		if o.esk
+			query.values.push(esk)
+		utils.pgqry query, (err, resp) ->
 			if err
 				cb(err)
 				return
+
+			
 			cb(null, utils.messageQueryPrepare(resp))
 			return
 		return
 
 	# Update a message
 	update: (o, cb) ->
+		console.log "upd", o
 		if utils.validate(o, ["fid","tid","mid","a","p","v"], cb) is false
 			return
 		# Make sure this user exists
@@ -252,6 +237,7 @@ class Messages
 				if err
 					cb(err)
 					return
+
 				o.p = utils.cleanProps(resp.p, o.p)
 				if utils.validate(o, ["p"], cb) is false
 					return
@@ -261,54 +247,36 @@ class Messages
 					cb(null, resp)
 					return
 				
+				if resp.v isnt o.v
+					utils.throwError(cb, "invalidVersion")
+					return
 
-				utils.getTimestamp (err, ts) ->
+
+				query =
+					name: "update msg"
+					text: "UPDATE m SET p = $1, la = $2 WHERE fid = $3 AND tid = $4 AND id = $5 AND v = $6 RETURNING #{FIELDS};" 
+					values: [
+						JSON.stringify(o.p)
+						o.a
+						o.fid
+						o.tid
+						o.mid
+						o.v
+					]					
+
+				utils.pgqry query, (err, resp) ->
 					if err
 						cb(err)
 						return
-					params =
-						TableName: TABLENAME
-						Key:
-							pid:
-								S: o.tid
-							id:
-								S: o.mid
-						AttributeUpdates:
-							p:
-								Value:
-									S: JSON.stringify(o.p)
-								Action: "PUT"
-							v:
-								Value:
-									S: ts
-								Action: "PUT"
-							la:
-								Value:
-									S: o.a
-								Action: "PUT"
-						Expected:
-							v:
-								ComparisonOperator: "EQ"
-								AttributeValueList: [{"S": o.v}]
-						ReturnValues: "ALL_NEW"
-						
-					if resp.a.toLowerCase() is o.a.toLowerCase()
-						params.AttributeUpdates.la = 
-							Action: "DELETE"
+					if resp.rowCount is 0
+						utils.throwError(cb, "invalidVersion")
+						return
 
-					dynamodb.updateItem params, (err, data) ->
+					threads.flush o, (err) ->
 						if err
-							if err.message is "The conditional request failed"
-								utils.throwError(cb, "invalidVersion")
-								return
 							cb(err)
 							return
-						threads.touch o, (err, resp) ->
-							if err
-								cb(err)
-								return
-							_cacheAndReturn(data, cb)
-							return
+						_cacheAndReturn(resp.rows[0], cb)
 						return
 					return	
 				return
@@ -317,13 +285,13 @@ class Messages
 
 
 _cacheAndReturn = (msg, cb) ->
-	msg = utils.dynamoConvertItem(msg)
-	key = "#{mcprefix}#{msg.id}"
 	msg = utils.messagePrepare(msg)
-	memcached.set key, msg, 86400, ->
+	memcached.set _mckey(msg), msg, 86400, ->
 	cb(null, msg)
 	return
 
+_mckey = (o) ->
+	return "#{mcprefix}#{o.id}"
 
 module.exports = new Messages()
 

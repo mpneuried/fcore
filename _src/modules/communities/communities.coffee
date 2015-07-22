@@ -2,8 +2,7 @@ _ = require "lodash"
 
 mcprefix = "fc_c"
 
-TABLENAME = "fcore"
-TABLENAME_FORUM = "fcore_f"
+FIELDS = "id, pid, v, p"
 
 class Communities
 	# Get all communities of a ThirdPartyId
@@ -17,7 +16,7 @@ class Communities
 			return
 		query = 
 			name: "communities by tpid"
-			text: "SELECT id, pid, v, p FROM c WHERE pid = $1"
+			text: "SELECT #{FIELDS} FROM c WHERE pid = $1"
 			values: [
 				o.tpid
 			]
@@ -109,7 +108,7 @@ class Communities
 			# Get the item from DB
 			query = 
 				name: "get community by id"
-				text: "SELECT id, pid, v, p FROM c WHERE id = $1"
+				text: "SELECT #{FIELDS} FROM c WHERE id = $1"
 				values: [
 					id
 				]
@@ -141,7 +140,7 @@ class Communities
 			return
 		query =
 			name: "insert community"
-			text: "INSERT INTO c (pid, p) VALUES ($1, $2) RETURNING id, pid, v, p;"
+			text: "INSERT INTO c (pid, p) VALUES ($1, $2) RETURNING #{FIELDS};"
 			values: [
 				o.tpid
 				utils.storeProps(o.p)
@@ -189,7 +188,7 @@ class Communities
 			id = o.cid.split("_")[1]
 			query =
 				name: "update community"
-				text: "UPDATE c SET v = get_unique_ts(), p = $1 WHERE id = $2 and v = $3 RETURNING id, pid, v, p"
+				text: "UPDATE c SET v = get_unique_ts(), p = $1 WHERE id = $2 and v = $3 RETURNING #{FIELDS}"
 				values: [
 					JSON.stringify(o.p)
 					id

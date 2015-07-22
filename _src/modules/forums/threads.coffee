@@ -7,7 +7,7 @@ TABLENAME = "fcore"
 
 mcprefix = "fc_t"
 
-fields = "id, fid, a, v, la, lm, tm, p, top"
+FIELDS = "id, fid, a, v, la, lm, tm, p, top"
 
 class Threads
 	# Try to grab messages of a deleted thread 
@@ -60,35 +60,52 @@ class Threads
 			if err
 				cb(err)
 				return
-		query =
-			name: "delete thread"
-			text: "DELETE FROM t WHERE id = $1 and fid = $2 RETURNING #{fields};"
-			values: [
-				o.tid
-				o.fid
-			]
-		utils.pgqry query, (err, resp) ->
-			console.log err, resp
-			console.log err, resp
+			query =
+				name: "delete thread"
+				text: "DELETE FROM t WHERE id = $1 and fid = $2 RETURNING #{FIELDS};"
+				values: [
+					o.tid
+					o.fid
+				]
+			utils.pgqry query, (err, resp) ->
+				if err
+					cb(err)
+					return
+				if resp.rowCount is 0
+					utils.throwError(cb, "threadNotFound")
+					return
+				
+				# Delete the cache for this thread
+				memcached.del _mckey(o), (err) ->
+					if err
+						cb(err)
+						return
+					forums.flush o, (err) ->
+						if err
+							cb(err)
+							return
+						cb(null, utils.respPrepare(resp.rows[0]))
+						return
+					return
+				return
+			return
+		return
+
+
+	flush: (o, cb) ->
+		memcached.del _mckey(o), (err) ->
 			if err
 				cb(err)
 				return
-			if resp.rowCount is 0
-				utils.throwError(cb, "threadNotFound")
-				return
-			
-			# Delete the cache for this thread
-			memcached.del "#{mcprefix}#{o.fid}_#{o.tid}"
-
-			cb(null, utils.respPrepare(resp.rows[0]))
+			cb(null, true)
 			return
 		return
+
 
 	get: (o, cb) ->
 		if utils.validate(o, ["tid","fid"], cb) is false
 			return
-		key = "#{mcprefix}#{o.fid}_#{o.tid}"
-		memcached.get key, (err, resp) ->
+		memcached.get _mckey(o), (err, resp) ->
 			if err
 				cb(err)
 				return
@@ -99,7 +116,7 @@ class Threads
 			
 			query =
 				name: "get thread"
-				text: "SELECT #{fields} FROM t where id = $1 and fid = $2"
+				text: "SELECT #{FIELDS} FROM t where id = $1 and fid = $2"
 				values: [
 					o.tid
 					o.fid
@@ -138,7 +155,7 @@ class Threads
 			if o.ts
 				query =
 					name: "insert thread with ts"
-					text: "INSERT INTO t (id, fid, a, top, p) VALUES ($1, $2, $3, $4, $5) RETURNING #{fields};"
+					text: "INSERT INTO t (id, fid, a, top, p) VALUES ($1, $2, $3, $4, $5) RETURNING #{FIELDS};"
 					values: [
 						"T#{o.ts}"
 						o.fid
@@ -149,7 +166,7 @@ class Threads
 			else
 				query =
 					name: "insert thread without ts"
-					text: "INSERT INTO t (fid, a, top, p) VALUES ($1, $2, $3, $4) RETURNING #{fields};"
+					text: "INSERT INTO t (fid, a, top, p) VALUES ($1, $2, $3, $4) RETURNING #{FIELDS};"
 					values: [
 						o.fid
 						o.a
@@ -169,7 +186,12 @@ class Threads
 				if resp.rowCount isnt 1
 					utils.throwError(cb, "insertFailed")
 					return
-				_cacheAndReturn(resp.rows[0], cb)
+				forums.flush o, (err) ->
+					if err
+						cb(err)
+						return
+					_cacheAndReturn(resp.rows[0], cb)
+					return
 				return
 			return
 		return
@@ -186,10 +208,9 @@ class Threads
 			return
 
 		esk = ""
-		
-		if o.bylm is "true"
-			order = "ORDER BY lm"
-		else
+		order = "ORDER BY lm"
+
+		if o.bylm isnt "true"
 			order = "ORDER BY id"
 
 		if o.forward is "true"
@@ -197,7 +218,7 @@ class Threads
 			comparer = ">"
 		else
 			order = order + " DESC"
-			comparer = ">"
+			comparer = "<"
 
 		if o.esk
 			if o.bylm is "true" 
@@ -206,13 +227,13 @@ class Threads
 				esk = "AND id #{comparer} $2"
 
 		query =
-			text: "SELECT #{fields} FROM t WHERE fid = $1 #{order} LIMIT 50"
+			text: "SELECT #{FIELDS} FROM t WHERE fid = $1 #{order} LIMIT 50"
 			values: [
 				o.fid
 			]
 		
 		if o.esk
-			query.values.push(o.esk)
+			query.values.push(esk)
 
 		utils.pgqry query, (err, resp) =>
 			if err
@@ -237,7 +258,7 @@ class Threads
 		# No need to validate. Should not be called by itself anyway.
 		query =
 			name: "touch threads"
-			text: "UPDATE t SET v = base36_timestamp() WHERE id = $1 and fid = $2 RETURNING #{fields}"
+			text: "UPDATE t SET v = base36_timestamp() WHERE id = $1 and fid = $2 RETURNING #{FIELDS}"
 			values: [
 				o.tid
 				o.fid
@@ -263,6 +284,7 @@ class Threads
 			if err
 				cb(err)
 				return
+		
 			o.p = utils.cleanProps(resp.p, o.p)
 			if utils.validate(o, ["p"], cb) is false
 				return
@@ -272,66 +294,39 @@ class Threads
 				cb(null, resp)
 				return
 
-			utils.getTimestamp (err, ts) ->
+			if resp.v isnt o.v
+				utils.throwError(cb, "invalidVersion")
+				return
+
+			lm = _.capitalize(resp.lm)
+
+			if resp.top
+				lm = resp.lm.toLowerCase()
+			
+			query =
+				name: "update thread"
+				text: "UPDATE t SET p = $1, v = base36_timestamp(), top = $2, lm = $3 WHERE fid = $4 AND id = $5 RETURNING #{FIELDS};"
+				values: [
+					JSON.stringify(o.p)
+					o.top
+					lm
+					o.fid
+					o.tid
+				]
+			utils.pgqry query, (err, resp) ->
 				if err
 					cb(err)
 					return
-				params =
-					TableName: TABLENAME
-					Key:
-						pid:
-							S: o.fid
-						id:
-							S: o.tid
-					AttributeUpdates:
-						p:
-							Value:
-								S: JSON.stringify(o.p)
-							Action: "PUT"
-						v:
-							Value:
-								S: ts
-					Expected:
-						v:
-							ComparisonOperator: "EQ"
-							AttributeValueList: [{"S": o.v}]
-					ReturnValues: "ALL_NEW"
-				# This was a sticky thread but it is turned off now.
-				if resp.top and o.top is null
-					# Remove the sticky `top` flag
-					params.AttributeUpdates.top =
-						Action: "DELETE"
-					# Thread is swithed to being "non-sticky".
-					if resp.lm
-						params.AttributeUpdates.lm =
-							Value:
-								S: "M#{resp.lm[-8..]}"
-							Action: "PUT"
-				# Thread is switched to being "sticky" with the `top` flag.
-				if not resp.top and o.top is 1
-					params.AttributeUpdates.top =
-						Value:
-							S: "1"
-						Action: "PUT"
-					if resp.lm
-						params.AttributeUpdates.lm =
-							Value:
-								S: "m#{resp.lm[-8..]}"
-							Action: "PUT"
+				if resp.rowCount is 0
+					utils.throwError(cb, "invalidVersion")
+					return
 
-
-				dynamodb.updateItem params, (err, data) ->
+				forums.flush o, (err) ->
 					if err
-						if err.message is "The conditional request failed"
-							utils.throwError(cb, "invalidVersion")
-							return
 						cb(err)
 						return
-					forums.touch o, (err, resp) ->
-						if err
-							cb(err)
-						_cacheAndReturn(data, cb)
-						return
+					console.log resp.rows[0]
+					_cacheAndReturn(resp.rows[0], cb)
 					return
 				return
 			return
@@ -450,14 +445,17 @@ _stickyUnchanged = (resp, o) ->
 
 
 _cacheAndReturn = (data, cb) ->
-	key = "#{mcprefix}#{data.fid}_#{data.id}"
-	data = utils.respPrepare(data)
+	data = utils.threadPrepare(data)
 	if data.id
-		memcached.set key, data, 86400, ->
+		memcached.set _mckey(data), data, 86400, ->
 	cb(null, data)
 	return
 
-
+_mckey = (o) ->
+	cachebuster = ""
+	if o.nocache
+		cachebuster = Math.random()
+	return "#{mcprefix}#{o.fid}_#{o.id}#{cachebuster}"
 
 module.exports = new Threads()
 

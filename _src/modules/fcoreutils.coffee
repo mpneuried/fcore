@@ -83,7 +83,7 @@ class Utils
 
 
 	messagePrepare: (item)->
-		if item.p?
+		if _.isString(item.p)
 			item.p = JSON.parse(item.p)
 		return _.omit(item, ["pid","fid","cid"])
 	
@@ -148,6 +148,13 @@ class Utils
 			key
 		JSON.stringify(_.omit(p, nullkeys))
 
+
+	threadPrepare: (item)->
+		if _.isString(item.p)
+			item.p = JSON.parse(item.p)
+		if item.lm
+			item.lm = "M#{item.lm[-8..]}"
+		return item
 
 	threadQueryPrepare: (items) ->
 		for e in items

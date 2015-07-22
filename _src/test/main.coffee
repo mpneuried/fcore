@@ -580,7 +580,7 @@ describe 'fCore -', ->
 			
 			it 'create a thread with editor of foreign community', ( done )->
 				thr = new td.Thread( tForumAA ).setEditor( tUserBC )
-				thr.setP( name: "Someting with not editor" ).request "POST", errorCallback( done, "forumNotFound", 404 )
+				thr.setP( name: "Someting with not editor" ).request "POST", errorCallback( done, "userNotFound", 404 )
 				return
 			
 			it 'create a thread with invalid p', ( done )->
