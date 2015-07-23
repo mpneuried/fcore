@@ -19,40 +19,27 @@ class Messages
 				o.tid
 				o.mid
 			]
-		params =
-			TableName: TABLENAME
-			Key:
-				pid:
-					S: o.tid
-				id:
-					S: o.mid
-			ReturnValues: "ALL_OLD"
-		# Delete this message
-		dynamodb.deleteItem params, (err, msg) ->
+		utils.pgqry query, (err, msg) ->
 			if err
+				cb(err)
+				return
+			if resp.rowCount is 0
 				utils.throwError(cb, "messageNotFound")
 				return
-			# Remove Author
-			msg = utils.dynamoConvertItem(msg)
-			
-			users.removeAuthor msg, (err, resp) ->
-				if err
-					cb(err)
-					return
-				# Delete Memcached Entry
-				memcached.del "#{mcprefix}#{o.mid}", ->
-				if not o.noupdate
-					# Update the thread counter
-					threads.updateCounter _.extend(o, {tm: -1}), (err, resp) ->
-						if err
-							cb(err)
-							return
-						cb(null, {thread:resp, message: utils.messagePrepare(msg)})
+
+			# Delete Memcached Entry
+			memcached.del "#{mcprefix}#{o.mid}", ->
+			if not o.noupdate
+				# Update the thread counter
+				threads.updateCounter _.extend(o, {tm: -1}), (err, resp) ->
+					if err
+						cb(err)
 						return
-				else
-					cb(null, {})
-					
-				return
+					cb(null, {thread:resp, message: utils.messagePrepare(msg)})
+					return
+			else
+				cb(null, {})
+				
 			return
 		return
 
@@ -149,23 +136,12 @@ class Messages
 						result = 
 							thread: thread
 
-						o.cid = user.cid
-						o.id = user.id
-						o.mid = msg.id
-						users.setAuthor o, (err, resp) ->
+						_cacheAndReturn msg, (err, resp) ->
 							if err
 								cb(err)
 								return
-
-							_cacheAndReturn msg, (err, resp) ->
-								if err
-									cb(err)
-									return
-								result.message = resp
-								# For an insert we return the message AND the thread.
-								
-								cb(null, result)
-								return
+							result.message = resp							
+							cb(null, result)
 							return
 						return
 					return
@@ -254,7 +230,7 @@ class Messages
 
 				query =
 					name: "update msg"
-					text: "UPDATE m SET p = $1, la = $2 WHERE fid = $3 AND tid = $4 AND id = $5 AND v = $6 RETURNING #{FIELDS};" 
+					text: "UPDATE m SET p = $1, la = $2, v = base36_timestamp() WHERE fid = $3 AND tid = $4 AND id = $5 AND v = $6 RETURNING #{FIELDS};" 
 					values: [
 						JSON.stringify(o.p)
 						o.a
