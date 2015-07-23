@@ -9,3 +9,5 @@ create_tables.js
 /test/
 
 *.rdb
+
+/config.json

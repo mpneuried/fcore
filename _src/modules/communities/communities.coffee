@@ -2,7 +2,7 @@ _ = require "lodash"
 
 mcprefix = "fc_c"
 
-FIELDS = "id, pid, v, p"
+FIELDS = "id, v, p"
 
 class Communities
 	# Get all communities of a ThirdPartyId
@@ -104,23 +104,21 @@ class Communities
 				# Cache hit
 				cb(null, resp)
 				return
-			[pid, id] = o.cid.split("_")
 			# Get the item from DB
 			query = 
-				name: "get community by id"
+				name: "get community by cid"
 				text: "SELECT #{FIELDS} FROM c WHERE id = $1"
 				values: [
-					id
+					o.cid
 				]
 			utils.pgqry query, (err, data) ->
 				if err
 					cb(err)
 					return
 				# Make sure the supplied pid is the same
-				if not data.rows.length or data.rows[0].pid isnt pid
+				if not data.rows.length
 					utils.throwError(cb, "communityNotFound")
 					return
-
 				_cacheAndReturn(data.rows[0], cb)
 				return
 			return
@@ -185,13 +183,12 @@ class Communities
 			if _.isEqual(data.p, o.p)
 				cb(null, data)
 				return
-			id = o.cid.split("_")[1]
 			query =
 				name: "update community"
 				text: "UPDATE c SET v = get_unique_ts(), p = $1 WHERE id = $2 and v = $3 RETURNING #{FIELDS}"
 				values: [
 					JSON.stringify(o.p)
-					id
+					o.cid
 					o.v
 				]
 
@@ -209,8 +206,8 @@ class Communities
 
 
 _cacheAndReturn = (data, cb) ->
-	key = "#{mcprefix}#{data.pid}_#{data.id}"
-	data = utils.communityPrepare(data)
+	key = "#{mcprefix}#{data.cid}"
+	data = utils.respPrepare(data)
 	memcached.set key, data, 86400, ->
 	cb(null, data)
 	return

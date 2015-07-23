@@ -1,7 +1,7 @@
 config = require "../config.json"
 _ = require "lodash"
 pg = require "pg"
-conString = "postgres://postgres:aesu8Ju@#{config.db.host}/#{config.db.name}"
+conString = "postgres://postgres:#{config.db.pw}@#{config.db.host}/#{config.db.name}"
 
 LASTTIMESTAMP = 0
 
@@ -17,17 +17,8 @@ class Utils
 	
 	communityQueryPrepare: (items) ->
 		for e in items
-			@communityPrepare(e)
+			@respPrepare(e)
 		
-	
-	# Merge the hash and range key into a single `id` field
-	communityPrepare: (item) ->
-		if item.id.length is 8
-			item.id = "#{item.pid}_#{item.id}"
-		if _.isString(item.p)
-			item.p = JSON.parse(item.p)
-		return _.omit(item, "pid")
-
 
 	# Convert a DynamoDB Item to a normal JS object.
 	dynamoConvertItem: (item) ->
