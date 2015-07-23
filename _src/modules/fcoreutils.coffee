@@ -42,19 +42,6 @@ class Utils
 	getRandomInt: (min, max) ->
 		return Math.floor(Math.random() * (max - min)) + min
 
-	# Return a unique timestamp string
-	#
-	# A timestamp is converted with `.toString(36)`
-	#
-	getTimestamp: (cb) ->
-		ts = new Date().getTime()
-		if ts is LASTTIMESTAMP
-			LASTTIMESTAMP = LASTTIMESTAMP + 1
-		else
-			LASTTIMESTAMP = ts
-		cb(null, LASTTIMESTAMP.toString(36))
-		return
-
 
 	isStringNumberBooleanNull: (item) ->
 		if not _.isString(item) and not _.isNumber(item) and not _.isBoolean(item) and not _.isNull(item)
@@ -77,25 +64,6 @@ class Utils
 		if _.isString(item.p)
 			item.p = JSON.parse(item.p)
 		return _.omit(item, ["pid","fid","cid"])
-	
-
-	multiquery: (params, cb, result=[]) ->
-		dynamodb.query params, (err, resp) =>
-			if err
-				cb(err)
-				return
-
-			result = result.concat(resp.Items)
-
-			if resp.LastEvaluatedKey?
-				params.ExclusiveStartKey = resp.LastEvaluatedKey
-				@multiquery(params, cb, result)
-			else
-				o = for e in result
-					@dynamoConvertItem({Item:e})
-				cb(null, o)
-			return
-		return
 
 
 	pgqry: (options, cb) ->
@@ -112,6 +80,7 @@ class Utils
 					return
 				done()
 				cb(null, result)
+				return
 			return
 		return
 
@@ -122,16 +91,7 @@ class Utils
 		return item
 
 
-	singlequery: (params, cb, result=[]) ->
-		dynamodb.query params, (err, resp) =>
-			if err
-				cb(err)
-				return
-			o = for e in resp.Items
-				@dynamoConvertItem({Item:e})
-			cb(null, o)
-			return
-		return
+
 
 
 	storeProps: (p) ->

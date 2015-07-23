@@ -226,6 +226,67 @@ class Users
 			return
 		return
 
+	# Remove author
+	#
+	# *Called when a message is deleted*
+	#
+	# Remove a simple association between a user and a message. 
+	# Used to query all messages by an author.
+	#
+	# Parameters:
+	# 
+	# * `id` (String) User Id
+	# * `cid` (String) Community Id
+	# * `mid` (String) Message Id
+	removeAuthor: (o, cb) ->
+		query =
+			name: "removeAuthor"
+			text: "DELETE FROM authors WHERE cid = $1 and uid = $2 AND mid = $3"
+			values: [
+				o.cid
+				o.id
+				o.mid
+			]
+		utils.pgqry query, (err, resp) ->
+			if err
+				cb(err)
+				return
+			cb(null, true)
+			return
+		return			
+
+	# Set author
+	#
+	# *Called when a message is inserted*
+	#
+	# Store a simple association between a user and a message. 
+	# Used to query all messages by an author.
+	#
+	# Parameters:
+	# 
+	# * `id` (String) User Id
+	# * `cid` (String) Community Id
+	# * `mid` (String) Message Id
+
+	setAuthor: (o, cb) ->
+		query =
+			name: "setAuthor"
+			text: "INSERT INTO authors (cid, uid, mid, fid, tid) VALUES ($1, $2, $3, $4, $5)"
+			values: [
+				o.cid
+				o.id
+				o.mid
+				o.fid
+				o.tid
+			]
+		utils.pgqry query, (err, data) ->
+			if err
+				cb(err)
+				return
+			cb(null, true)
+			return
+		return
+
 
 	# Update a user
 	#
@@ -347,9 +408,6 @@ class Users
 			if err
 				cb(err)
 				return
-			if not forum.id?
-				utils.throwError(cb, "forumNotFound")
-				return
 			# The forum exists. Now check the user
 			o.id = o.a
 			o.cid = forum.cid
@@ -371,13 +429,8 @@ _preCheckUserId = (o, cb) ->
 		cb(null, o)
 		return
 	# generate a new userid
-	utils.getTimestamp (err, ts) ->
-		if err
-			cb(err)
-			return
-		o.id = ts + utils.getRandomInt(10,100)
-		cb(null, o)
-		return
+	o.id = utils.getRandomInt(10,1000000000)
+	cb(null, o)
 	return
 
 

@@ -23,7 +23,7 @@ class Messages
 			if err
 				cb(err)
 				return
-			if resp.rowCount is 0
+			if msg.rowCount is 0
 				utils.throwError(cb, "messageNotFound")
 				return
 

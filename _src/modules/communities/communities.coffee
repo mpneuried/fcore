@@ -206,7 +206,7 @@ class Communities
 
 
 _cacheAndReturn = (data, cb) ->
-	key = "#{mcprefix}#{data.cid}"
+	key = "#{mcprefix}#{data.id}"
 	data = utils.respPrepare(data)
 	memcached.set key, data, 86400, ->
 	cb(null, data)
