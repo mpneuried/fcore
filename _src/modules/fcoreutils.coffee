@@ -20,20 +20,6 @@ class Utils
 			@respPrepare(e)
 		
 
-	# Convert a DynamoDB Item to a normal JS object.
-	dynamoConvertItem: (item) ->
-		o = {}
-		if not item.Item? and not item.Attributes?
-			return o
-		item = if item.Item? then item.Item else item.Attributes
-		for key of item
-			if item[key].S?
-				o[key] = item[key].S
-			else if item[key].N?
-				o[key] = Number(item[key].N)
-		return o
-
-
 	forumQueryPrepare: (items) ->
 		for e in items
 			@respPrepare(e)
@@ -91,9 +77,6 @@ class Utils
 		return item
 
 
-
-
-
 	storeProps: (p) ->
 		nullkeys = for key of p when p[key] is null
 			key
@@ -106,6 +89,7 @@ class Utils
 		if item.lm
 			item.lm = "M#{item.lm[-8..]}"
 		return item
+
 
 	threadQueryPrepare: (items) ->
 		for e in items
@@ -127,8 +111,6 @@ class Utils
 	userQueryPrepare: (items) ->
 		for e in items
 			@respPrepare(e)
-
-
 
 
 	validate: (o, items, cb) ->
@@ -238,7 +220,6 @@ class Utils
 		return o
 
 # Error handling
-
 ERRORS =
 	"missingParameter": "No `<%= item %>` supplied"
 	"invalidValue": "<%= msg %>"
@@ -266,6 +247,7 @@ _VALID =
 	id: /^[a-zA-Z0-9-_]{3,32}$/
 	extid: /^.{1,256}$/
 	ts: /^[a-z0-9]{8}$/
+
 
 _initErrors = ->
 	for key, msg of ERRORS

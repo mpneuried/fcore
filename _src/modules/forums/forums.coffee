@@ -4,11 +4,9 @@ communities = null
 threads = null
 mcprefix = "fc_f"
 
-TABLENAME = "fcore_f"
+FIELDS = "id, cid, v, p, tt, tm"
 
 class Forums
-
-
 
 	# Get all forums by Community id
 	#
@@ -21,7 +19,7 @@ class Forums
 			return
 		query =
 			name: "forums by cid"
-			text: "SELECT id, cid, v, p, tt, tm FROM f WHERE cid = $1"
+			text: "SELECT #{FIELDS} FROM f WHERE cid = $1"
 			values: [
 				o.cid
 			]
@@ -46,7 +44,7 @@ class Forums
 			return
 		query =
 			name: "forums by tpid"
-			text: "SELECT id, cid, v, p, tt, tm FROM f WHERE tpid = $1"
+			text: "SELECT #{FIELDS} FROM f WHERE tpid = $1"
 			values: [
 				o.tpid
 			]
@@ -104,7 +102,7 @@ class Forums
 				return
 			query =
 				name: "delete Forum"
-				text: "DELETE FROM f WHERE id = $1"
+				text: "DELETE FROM f WHERE id = $1 RETURNING #{FIELDS};"
 				values: [
 					o.fid
 				]
@@ -115,21 +113,12 @@ class Forums
 				if resp.rowCount is 0
 					utils.throwError(cb, "forumNotFound")
 					return
-				# An item was found and deleted.
-				#
-				# There are threads in the forum. Take care of them.
-				if forum.tt > 0
-					rsmq.sendMessage {qname: QUEUENAME, message: JSON.stringify({action: "df", fid: o.fid})}, (err, resp) ->
-						if err
-							console.error "ERROR trying to send RSMQ message", err
-						console.log "RSMQ DELETE FORUM", resp
-						return
 				# Delete the cache for this forum
 				memcached.del _mckey(o), (err) -> 
 					if err
 						cb(err)
 						return
-					cb(null, utils.respPrepare(forum))
+					cb(null, utils.respPrepare(resp.rows[0]))
 					return
 				return
 		return
@@ -159,7 +148,7 @@ class Forums
 			# Get the item from DB
 			query = 
 				name: "get forum by id"
-				text: "SELECT id, cid, v, p, tt, tm FROM f WHERE id = $1"
+				text: "SELECT #{FIELDS} FROM f WHERE id = $1"
 				values: [
 					o.fid
 				]
@@ -199,7 +188,7 @@ class Forums
 				return
 			query =
 				name: "insert forum"
-				text: "INSERT INTO f (cid, tpid, p) VALUES ($1, $2, $3) RETURNING id, cid, v, p, tt, tm;"
+				text: "INSERT INTO f (cid, tpid, p) VALUES ($1, $2, $3) RETURNING #{FIELDS};"
 				values: [
 					o.cid
 					o.cid.split("_")[0]
@@ -232,7 +221,6 @@ class Forums
 		if utils.validate(o, ["fid","p","v"], cb) is false
 			return
 		@get o, (err, resp) ->
-			console.log "..sd.", err, resp
 			if err
 				cb(err)
 				return
@@ -251,7 +239,7 @@ class Forums
 			
 			query =
 				name: "update forum"
-				text: "UPDATE f SET p = $1, v = base36_timestamp() WHERE id = $2 AND v = $3 RETURNING id, cid, v, p, tt, tm;"
+				text: "UPDATE f SET p = $1, v = base36_timestamp() WHERE id = $2 AND v = $3 RETURNING #{FIELDS};"
 				values: [
 					JSON.stringify(o.p)
 					o.fid
@@ -270,58 +258,6 @@ class Forums
 			return
 		return
 
-	# Update the counters of a forum
-	#
-	# Parameters:
-	#
-	# * `fid` (String) The id of the forum
-	# * `tt` (Number) The number to modify tt (Total Threads) with.
-	# * `tm` (Number) The number to modify tt (Total Messages) with.
-	#
-	updateCounter: (o, cb) ->
-		if utils.validate(o, ["fid","tm", "tt"], cb) is false
-			return
-
-		# Make sure the forum exists
-		@get o, (err, resp) ->
-			if err
-				cb(null, {})
-				return
-
-			utils.getTimestamp (err, ts) ->
-				if err
-					cb(err)
-					return
-				params =
-					TableName: TABLENAME
-					Key:
-						id:
-							S: o.fid
-					AttributeUpdates:
-						tm:
-							Action: "ADD"
-							Value:
-								N: "#{o.tm}"
-						tt:
-							Action: "ADD"
-							Value:
-								N: "#{o.tt}"
-						v:
-							Value:
-								S: ts
-					ReturnValues: "ALL_NEW"
-					Expected:
-						id:
-							ComparisonOperator: "NOT_NULL"
-				dynamodb.updateItem params, (err, data) ->		
-					if err
-						cb(err)
-						return
-					_cacheAndReturn(data, cb)
-					return
-				return
-			return
-		return
 
 _cacheAndReturn = (data, cb) ->
 	data = utils.respPrepare(data)

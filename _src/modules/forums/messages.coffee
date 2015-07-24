@@ -8,7 +8,6 @@ FIELDS = ["id, tid, fid, a, p, v, cid"]
 
 class Messages
 	delete: (o, cb) ->
-		# TODO: Make sure to update the `la` key of a thread if the last message is deleted.
 		if utils.validate(o, ["fid","tid","mid"], cb) is false
 			return
 		query =
@@ -28,18 +27,13 @@ class Messages
 				return
 
 			# Delete Memcached Entry
-			memcached.del "#{mcprefix}#{o.mid}", ->
-			if not o.noupdate
-				# Update the thread counter
-				threads.updateCounter _.extend(o, {tm: -1}), (err, resp) ->
-					if err
-						cb(err)
-						return
-					cb(null, {thread:resp, message: utils.messagePrepare(msg)})
+			memcached.del _mckey(o), ->
+			threads.get o, (err, thread) ->
+				if err
+					cb(err)
 					return
-			else
-				cb(null, {})
-				
+				cb(null, {thread: thread, message: utils.messagePrepare(msg.rows[0])})
+				return			
 			return
 		return
 
@@ -55,22 +49,22 @@ class Messages
 				# Cache hit
 				cb(null, resp)
 				return
-			# Not cached
-			params = 
-				TableName: TABLENAME
-				Key:
-					pid:
-						S: o.tid
-					id:
-						S: o.mid
-			dynamodb.getItem params, (err, data) ->
+			query =
+				name: "get msg"
+				text: "SELECT #{FIELDS} FROM m WHERE fid = $1 AND tid = $2 AND id = $3"
+				values: [
+					o.fid
+					o.tid
+					o.mid
+				]
+			utils.pgqry query, (err, resp) ->
 				if err
 					cb(err)
 					return
-				if _.isEmpty(data)
+				if resp.rowCount is 0
 					utils.throwError(cb, "messageNotFound")
 					return
-				_cacheAndReturn(data, cb)
+				_cacheAndReturn(resp.rows[0], cb)
 				return
 			return
 		return 
@@ -123,7 +117,7 @@ class Messages
 				utils.pgqry query, (err, data) ->
 					if err
 						if err.detail.indexOf("already exists") > -1
-							utils.throwError(cb, "threadExists")
+							utils.throwError(cb, "messageExists")
 							return
 						cb(err)
 						return
@@ -181,7 +175,7 @@ class Messages
 
 		query =
 			name: "messages by thread"
-			text: "SELECT #{FIELDS} FROM m WHERE fid = $1 and tid = $2 ORDER BY ID #{ORDER} LIMIT $3"
+			text: "SELECT #{FIELDS} FROM m WHERE fid = $1 and tid = $2 ORDER BY ID #{order} LIMIT $3"
 			values: [
 				o.fid
 				o.tid
@@ -195,13 +189,12 @@ class Messages
 				return
 
 			
-			cb(null, utils.messageQueryPrepare(resp))
+			cb(null, utils.messageQueryPrepare(resp.rows))
 			return
 		return
 
 	# Update a message
 	update: (o, cb) ->
-		console.log "upd", o
 		if utils.validate(o, ["fid","tid","mid","a","p","v"], cb) is false
 			return
 		# Make sure this user exists
@@ -247,8 +240,8 @@ class Messages
 					if resp.rowCount is 0
 						utils.throwError(cb, "invalidVersion")
 						return
-
-					threads.flush o, (err) ->
+					console.log "o.msg", o
+					threads.flush {fid: o.fid, id: o.tid}, (err) ->
 						if err
 							cb(err)
 							return

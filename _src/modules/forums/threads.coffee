@@ -47,12 +47,7 @@ class Threads
 			return
 		return
 
-	# Delete a thread
-	# 
-	# * Delete the thread
-	# * Update Forum Counters
-	# * Queue this thread for deletion
-	#
+
 	delete: (o, cb) ->
 		if utils.validate(o, ["tid","fid"], cb) is false
 			return
@@ -93,6 +88,7 @@ class Threads
 
 
 	flush: (o, cb) ->
+		console.log "flush threads",_mckey(o)
 		memcached.del _mckey(o), (err) ->
 			if err
 				cb(err)
@@ -186,7 +182,7 @@ class Threads
 				if resp.rowCount isnt 1
 					utils.throwError(cb, "insertFailed")
 					return
-				forums.flush o, (err) ->
+				forums.flush {id: o.fid}, (err) ->
 					if err
 						cb(err)
 						return
@@ -249,34 +245,6 @@ class Threads
 		return
 
 
-	# Touch the ts of a thread
-	# and flush the cache. Called by
-	#
-	# * messages.update
-	#
-	touch: (o, cb) ->
-		# No need to validate. Should not be called by itself anyway.
-		query =
-			name: "touch threads"
-			text: "UPDATE t SET v = base36_timestamp() WHERE id = $1 and fid = $2 RETURNING #{FIELDS}"
-			values: [
-				o.tid
-				o.fid
-			]
-
-		utils.pgqry query, (err, resp) ->
-			if err
-				cb(err)
-				return
-			if resp.rowCount is 0
-				utils.throwError(cb, "threadNotFound")
-				return
-			_cacheAndReturn(resp.rows[0], cb)
-			return
-		return
-
-	# Update a thread
-	#
 	update: (o, cb) ->
 		if utils.validate(o, ["tid","fid","p","v","top"], cb) is false
 			return
@@ -332,94 +300,6 @@ class Threads
 			return
 		return
 
-
-	# This will be called by
-	#
-	# * messages.delete
-	# * messages.insert
-	#
-	updateCounter: (o, cb) ->
-		if utils.validate(o, ["fid","tid","tm"], cb) is false
-			return
-		# Get the last Author (will not be there on delete)
-		@_lastAuthor o, (err, lastMsg) ->
-			utils.getTimestamp (err, ts) ->
-				if err
-					cb(err)
-					return
-				params =
-					TableName: TABLENAME
-					Key:
-						pid:
-							S: o.fid
-						id:
-							S: o.tid
-					AttributeUpdates:
-						tm:
-							Action: "ADD"
-							Value:
-								N: "#{o.tm}"
-						v:
-							Value:
-								S: ts
-						la:
-							Value:
-								S: lastMsg.a
-					ReturnValues: "ALL_NEW"
-					Expected:
-						pid:
-							ComparisonOperator: "NOT_NULL"
-						id:
-							ComparisonOperator: "NOT_NULL"
-				# Message was deleted 
-				if o.tm is -1
-					# This was the last msg in the thread.
-					# Delete `la` and the `lm` key with the last message date.
-					if lastMsg.a is ""
-						params.AttributeUpdates.lm =
-							Action: "DELETE"
-						params.AttributeUpdates.la =
-							Action: "DELETE"
-					# There are other messages.
-					# Update `la` and `lm` to the data of the latest msg.
-					else
-						params.AttributeUpdates.lm =
-							Action: "PUT"
-							Value:
-								S: if o.top then "m#{lastMsg.id[-8..]}" else "M#{lastMsg.id[-8..]}"
-						params.AttributeUpdates.la =
-							Action: "PUT"
-							Value:
-								S: lastMsg.a
-				# Message was inserted
-				else
-					params.AttributeUpdates.lm =
-						Action: "PUT"
-						Value:
-							S: if o.top then "m#{o.mid[-8..]}" else o.mid 
-					params.AttributeUpdates.la =
-						Action: "PUT"
-						Value:
-							S: o.a
-				dynamodb.updateItem params, (err, data) ->
-					if err
-						cb(err)
-						return
-					o.tt = 0
-					thread = utils.dynamoConvertItem(data)
-					# Update the forum
-					forums.updateCounter o, (err, fdata) ->
-						if err
-							cb(err)
-							return
-						# Cache the new thread data
-						else
-							_cacheAndReturn(data, cb)
-						return
-					return
-				return
-			return
-		return
 
 	_lastAuthor: (o, cb) ->
 		if o.a

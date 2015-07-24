@@ -36,57 +36,20 @@ class Communities
 	delete: (o, cb) ->
 		if utils.validate(o, ["cid"], cb) is false
 			return
-		params =
-			TableName: TABLENAME_FORUM
-			IndexName: "cid-index"
-			Limit: 1
-			AttributesToGet: ["id"]
-			KeyConditions:
-				cid:
-					ComparisonOperator: "EQ"
-					AttributeValueList: [
-						S: o.cid
-					]
-		utils.singlequery params, (err, resp) =>
+		query =
+			name: "delete community"
+			text: "DELETE FROM c WHERE id = $1 RETURNING #{FIELDS};"
+			values: [o.cid]
+		utils.pgqry query, (err, resp) ->
 			if err
 				cb(err)
 				return
-			if resp.length
-				utils.throwError(cb, "communityHasForums")
-				return
-			params =
-				TableName: TABLENAME
-				Key:
-					pid:
-						S: o.cid.split("_")[0]
-					id:
-						S: o.cid.split("_")[1]
-				ReturnValues: "ALL_OLD"
-			dynamodb.deleteItem params, (err, resp) ->
+			# Delete the cache for this community
+			memcached.del "#{mcprefix}#{o.cid}", (err) -> 
 				if err
 					cb(err)
 					return
-				if not resp.Attributes?
-					utils.throwError(cb, "communityNotFound")
-					return
-				resp = utils.dynamoConvertItem(resp)
-				
-				console.log "COMMUNITY DELETED", resp
-				# An item was found and deleted.
-				#
-				# There might be users. Delete all of them.
-				rsmq.sendMessage {qname: QUEUENAME, message: JSON.stringify({action: "dc", cid: o.cid})}, (err, resp) ->
-					if err
-						console.error( err ) 
-					console.log "RSMQ DELETE COMMUNITY", resp
-					return
-				# Delete the cache for this community
-				memcached.del "#{mcprefix}#{o.cid}", (err) -> 
-					if err
-						cb(err)
-						return
-					cb(null, utils.communityPrepare(resp))
-					return
+				cb(null, utils.respPrepare(resp.rows[0]))
 				return
 			return
 		return
