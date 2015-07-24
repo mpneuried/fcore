@@ -25,11 +25,6 @@ root.express = require "express"
 Memcached = require "memcached"
 root.memcached = new Memcached(config.memcached)
 
-# root.RedisInst = require "redis"
-# redis = RedisInst.createClient()
-RedisSMQ = require "rsmq"
-root.rsmq = new RedisSMQ(config.rsmq)
-
 long_cache = 24 * 3600 * 1000 * 90 # 90 days
 
 app = express()

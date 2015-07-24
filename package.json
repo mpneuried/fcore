@@ -2,7 +2,7 @@
   "name": "fcore",
   "private": true,
   "description": "fcore",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "author": "P. Liess <smrchy+npm@gmail.com>",
   "engines": {
     "node": "> 0.12.0"
@@ -11,21 +11,14 @@
     "start": "node index.js"
   },
   "dependencies": {
-    "async": "*",
     "pg": "*",
     "body-parser": "*",
     "compression": "*",
     "express": "*",
-    "hiredis": "*",
     "lodash": "*",
     "memcached": "*",
     "morgan": "*",
-    "redis": "*",
-    "rsmq": "*",
     "serve-favicon": "*"
-  },
-  "optionalDependencies": {
-    "hiredis": "*"
   },
   "devDependencies": {
     "clone": "*",

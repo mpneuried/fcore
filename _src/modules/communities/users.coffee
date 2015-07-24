@@ -1,5 +1,4 @@
 _ = require "lodash"
-async = require "async"
 mcprefix = "fc_u"
 
 forums = null
@@ -8,35 +7,6 @@ communities = null
 FIELDS = "id, cid, c, v, p, extid"
 
 class Users
-
-
-	cleanup: (o, cb) ->
-		console.log "RUNNING USERS.cleanup"
-		@users {cid: o.cid, type: "all"}, (err, resp) =>
-			if err
-				cb(err)
-				return
-			if not resp.length
-				cb(null, 0)
-				return
-			jobs = []
-			_.each resp, (e) =>
-				m =
-					cid: o.cid
-					id: e.id
-					v: e.v
-
-				jobs.push (callback) =>
-					@delete(m, callback)
-					return
-				return
-			async.parallelLimit jobs, 2, (err, results) ->
-				if err
-					console.log "Error: users 	cleanup async", err
-					cb(err)
-					return
-				cb(null, true)
-		return
 
 
 	get: (o, cb) ->

@@ -1,8 +1,7 @@
 {
 	"db": {
 		"host": "172.31.16.97",
-		"name": "fcore",
-		"pw": "XXXXXXXX"
+		"name": "fcore"
 	},
 	"rsmq": {
 		"host": "127.0.0.1",

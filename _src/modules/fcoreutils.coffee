@@ -1,7 +1,8 @@
 config = require "../config.json"
 _ = require "lodash"
 pg = require "pg"
-conString = "postgres://postgres:#{config.db.pw}@#{config.db.host}/#{config.db.name}"
+conString = "postgres://postgres:#{process.env.POSTGRESQL_PW or config.db.pw}@#{process.env.POSTGRESQL_HOST or config.db.host}/#{process.env.POSTGRESQL_NAME or config.db.name}"
+console.log conString
 
 LASTTIMESTAMP = 0
 
@@ -216,7 +217,12 @@ class Utils
 					else if o[item] is "all"
 						o[item] = ["id","c","p","v"]
 					else
-						o[item] = ["id"]		
+						o[item] = ["id"]
+				when "bylm", "forward"
+					if o[item] is "true"
+						o[item] = 1
+					else
+						o[item] = 0	
 		return o
 
 # Error handling

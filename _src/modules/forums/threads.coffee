@@ -1,51 +1,13 @@
 _ = require "lodash"
-async = require "async"
 forums = null
 users = null
 messages = null
-TABLENAME = "fcore"
 
 mcprefix = "fc_t"
 
 FIELDS = "id, fid, a, v, la, lm, tm, p, top"
 
 class Threads
-	# Try to grab messages of a deleted thread 
-	#
-	# If there are messages, delete them.
-	cleanup: (o, cb) ->
-		console.log "RUNNING THREADS.cleanup"
-		messages.messagesByThread o, (err, resp) ->
-			if err
-				cb(err)
-				return
-			if not resp.length
-				cb(null, 0)
-				return
-			jobs = []
-			_.each resp, (e) ->
-				m =
-					noupdate: true
-					fid: o.fid
-					tid: o.tid
-					mid: e.id
-
-				jobs.push (callback) ->
-					messages.delete(m, callback)
-					return
-				return
-			async.parallelLimit jobs, 2, (err, results) ->
-				if err
-					console.log "Error: cleanup async", err
-					cb(err)
-					return
-				if results.length < 50
-					cb(null, 0) # No more threads. Can delete this message.
-				else
-					cb(null, true) # More threads. Keep the queued message.
-				return
-			return
-		return
 
 
 	delete: (o, cb) ->
@@ -200,37 +162,38 @@ class Threads
 	# * `fid` (String) Forum Id
 	#
 	threadsByForum: (o, cb) ->
-		if utils.validate(o, ["fid","esk"], cb) is false
+		if utils.validate(o, ["fid", "esk", "bylm", "forward"], cb) is false
 			return
 
-		esk = ""
-		order = "ORDER BY lm"
+		
+		order = "ORDER BY id"
 
-		if o.bylm isnt "true"
-			order = "ORDER BY id"
+		if o.bylm
+			order = "ORDER BY lm"
 
-		if o.forward is "true"
+		if o.forward
 			order = order + " ASC"
 			comparer = ">"
+			esk = ""
 		else
 			order = order + " DESC"
 			comparer = "<"
+			esk = "Z"
 
 		if o.esk
-			if o.bylm is "true" 
+			if o.bylm 
 				esk = "AND lm #{comparer} $2"
 			else
 				esk = "AND id #{comparer} $2"
 
 		query =
-			text: "SELECT #{FIELDS} FROM t WHERE fid = $1 #{order} LIMIT 50"
+			name: "threads by forum #{o.bylm}#{o.forward}#{Boolean(esk)}"
+			text: "SELECT #{FIELDS} FROM t WHERE fid = $1 AND id #{comparer} $2 #{order} LIMIT 50"
 			values: [
 				o.fid
+				esk
 			]
-		
-		if o.esk
-			query.values.push(esk)
-
+		console.log "query", query
 		utils.pgqry query, (err, resp) =>
 			if err
 				cb(err)

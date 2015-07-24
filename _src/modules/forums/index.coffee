@@ -3,7 +3,6 @@ app = module.exports = express()
 forums = require "./forums"
 threads = require "./threads"
 messages = require "./messages"
-worker = require "./worker"
 
 # All responses in this app are application/json
 # Set it as the default

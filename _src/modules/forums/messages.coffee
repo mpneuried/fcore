@@ -240,7 +240,6 @@ class Messages
 					if resp.rowCount is 0
 						utils.throwError(cb, "invalidVersion")
 						return
-					console.log "o.msg", o
 					threads.flush {fid: o.fid, id: o.tid}, (err) ->
 						if err
 							cb(err)

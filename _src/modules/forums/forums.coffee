@@ -1,5 +1,4 @@
 _ = require "lodash"
-async = require "async"
 communities = null
 threads = null
 mcprefix = "fc_f"
@@ -33,6 +32,7 @@ class Forums
 			return
 		return
 
+
 	# Get all forums by ThirdPartyId
 	#
 	# Parameters:
@@ -58,36 +58,6 @@ class Forums
 			return
 		return
 
-
-	# Try to find threads for this forum and delete them
-	#
-	cleanup: (o, cb) ->
-		threads.threadsByForum o, (err, resp) ->
-			if err
-				cb(err)
-				return
-			if not resp.length
-				cb(null, 0)
-				return
-			jobs = []
-			_.each resp, (e) ->
-				m =
-					noupdate: true
-					fid: o.fid
-					tid: e.id
-
-				jobs.push (callback) ->
-					threads.delete(m, callback)
-					return
-				return
-			async.parallelLimit jobs, 2, (err, results) ->
-				if results.length < 100
-					cb(null, 0) # No more threads. Can delete this message.
-				else
-					cb(null, true) # More threads. Keep the queued message.
-				return
-			return
-		return
 
 	# Delete a forum
 	# 
