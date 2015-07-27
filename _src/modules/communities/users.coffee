@@ -24,10 +24,10 @@ class Users
 			# Get the item from DB
 			query = 
 				name: "get user by id"
-				text: "SELECT #{FIELDS} FROM u WHERE id = $1 and cid = $2"
+				text: "SELECT #{FIELDS} FROM u WHERE cid = $1 and id = $2"
 				values: [
-					o.id
 					o.cid
+					o.id
 				]
 			utils.pgqry query, (err, resp) ->
 				if err
@@ -59,10 +59,10 @@ class Users
 			# Get the item from DB
 			query = 
 				name: "get forum by id"
-				text: "SELECT #{FIELDS} FROM u WHERE extid = $1 and cid = $2"
+				text: "SELECT #{FIELDS} FROM u WHERE cid = $2 AND extid = $1"
 				values: [
-					o.extid
 					o.cid
+					o.extid
 				]
 			utils.pgqry query, (err, data) ->
 				if err
@@ -196,67 +196,6 @@ class Users
 			return
 		return
 
-	# Remove author
-	#
-	# *Called when a message is deleted*
-	#
-	# Remove a simple association between a user and a message. 
-	# Used to query all messages by an author.
-	#
-	# Parameters:
-	# 
-	# * `id` (String) User Id
-	# * `cid` (String) Community Id
-	# * `mid` (String) Message Id
-	removeAuthor: (o, cb) ->
-		query =
-			name: "removeAuthor"
-			text: "DELETE FROM authors WHERE cid = $1 and uid = $2 AND mid = $3"
-			values: [
-				o.cid
-				o.id
-				o.mid
-			]
-		utils.pgqry query, (err, resp) ->
-			if err
-				cb(err)
-				return
-			cb(null, true)
-			return
-		return			
-
-	# Set author
-	#
-	# *Called when a message is inserted*
-	#
-	# Store a simple association between a user and a message. 
-	# Used to query all messages by an author.
-	#
-	# Parameters:
-	# 
-	# * `id` (String) User Id
-	# * `cid` (String) Community Id
-	# * `mid` (String) Message Id
-
-	setAuthor: (o, cb) ->
-		query =
-			name: "setAuthor"
-			text: "INSERT INTO authors (cid, uid, mid, fid, tid) VALUES ($1, $2, $3, $4, $5)"
-			values: [
-				o.cid
-				o.id
-				o.mid
-				o.fid
-				o.tid
-			]
-		utils.pgqry query, (err, data) ->
-			if err
-				cb(err)
-				return
-			cb(null, true)
-			return
-		return
-
 
 	# Update a user
 	#
@@ -310,12 +249,12 @@ class Users
 					
 					query =
 						name: "user update with extid"
-						text: "UPDATE u SET p = $1, v = base36_timestamp(), extid = $2 WHERE id = $3 and cid = $4 and v = $5 RETURNING #{FIELDS};"
+						text: "UPDATE u SET p = $1, v = base36_timestamp(), extid = $2 WHERE cid = $3 and id = $4 and v = $5 RETURNING #{FIELDS};"
 						values: [
 							JSON.stringify(o.p)
 							o.extid
-							o.id
 							o.cid
+							o.id
 							o.v
 						]
 
@@ -399,7 +338,7 @@ _preCheckUserId = (o, cb) ->
 		cb(null, o)
 		return
 	# generate a new userid
-	o.id = utils.getRandomInt(10,1000000000)
+	o.id = "user#{utils.getRandomInt(12345678,99999999)}"
 	cb(null, o)
 	return
 

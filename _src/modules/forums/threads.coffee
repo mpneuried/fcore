@@ -19,10 +19,10 @@ class Threads
 				return
 			query =
 				name: "delete thread"
-				text: "DELETE FROM t WHERE id = $1 and fid = $2 RETURNING #{FIELDS};"
+				text: "DELETE FROM t WHERE fid = $1 AND id = $2 RETURNING #{FIELDS};"
 				values: [
-					o.tid
 					o.fid
+					o.tid
 				]
 			utils.pgqry query, (err, resp) ->
 				if err
@@ -74,10 +74,10 @@ class Threads
 			
 			query =
 				name: "get thread"
-				text: "SELECT #{FIELDS} FROM t where id = $1 and fid = $2"
+				text: "SELECT #{FIELDS} FROM t where fid = $1 AND id = $2"
 				values: [
-					o.tid
 					o.fid
+					o.tid
 				]
 				
 			utils.pgqry query, (err, resp) ->
@@ -174,26 +174,26 @@ class Threads
 		if o.forward
 			order = order + " ASC"
 			comparer = ">"
-			esk = ""
+			esk = "id #{comparer} ''"
 		else
 			order = order + " DESC"
 			comparer = "<"
-			esk = "Z"
+			esk = "id #{comparer} 'Z'"
 
 		if o.esk
 			if o.bylm 
-				esk = "AND lm #{comparer} $2"
+				esk = "lm #{comparer} $2"
 			else
-				esk = "AND id #{comparer} $2"
+				esk = "id #{comparer} $2"
 
 		query =
-			name: "threads by forum #{o.bylm}#{o.forward}#{Boolean(esk)}"
-			text: "SELECT #{FIELDS} FROM t WHERE fid = $1 AND id #{comparer} $2 #{order} LIMIT 50"
+			name: "threads by forum #{o.bylm}#{o.forward}#{Boolean(o.esk)}"
+			text: "SELECT #{FIELDS} FROM t WHERE fid = $1 AND #{esk} #{order} LIMIT 50"
 			values: [
 				o.fid
-				esk
 			]
-		console.log "query", query
+		if o.esk
+			query.values.push(esk)
 		utils.pgqry query, (err, resp) =>
 			if err
 				cb(err)

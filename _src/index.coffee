@@ -9,10 +9,6 @@ else
 	config = require "./config.json"
 	root.devmode = false
 
-_ = require "lodash"
-
-root.QUEUENAME = "fcore"
-
 morgan = require "morgan"
 compress = require "compression"
 favicon = require "serve-favicon"
