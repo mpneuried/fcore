@@ -174,8 +174,8 @@ class Messages
 			esk = "AND id #{comparer} $4"
 
 		query =
-			name: "messages by thread"
-			text: "SELECT #{FIELDS} FROM m WHERE fid = $1 and tid = $2 ORDER BY ID #{order} LIMIT $3"
+			name: "messages by thread#{o.forward}#{Boolean(o.esk)}"
+			text: "SELECT #{FIELDS} FROM m WHERE fid = $1 and tid = $2 #{esk} ORDER BY ID #{order} LIMIT $3"
 			values: [
 				o.fid
 				o.tid
@@ -183,6 +183,7 @@ class Messages
 			]
 		if o.esk
 			query.values.push(esk)
+		console.log "QUERY", query.text, query.values
 		utils.pgqry query, (err, resp) ->
 			if err
 				cb(err)

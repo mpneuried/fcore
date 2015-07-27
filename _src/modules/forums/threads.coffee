@@ -194,6 +194,7 @@ class Threads
 			]
 		if o.esk
 			query.values.push(esk)
+		console.log "QUERY", query.text, query.values
 		utils.pgqry query, (err, resp) =>
 			if err
 				cb(err)
