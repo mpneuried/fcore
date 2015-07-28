@@ -167,18 +167,18 @@ class Threads
 
 		
 		order = "ORDER BY id"
-
+		orderitem = "id"
 		if o.bylm
 			order = "ORDER BY lm"
-
+			orderitem = "lm"
 		if o.forward
 			order = order + " ASC"
 			comparer = ">"
-			esk = "id #{comparer} ''"
+			esk = "#{orderitem} > ''"
 		else
 			order = order + " DESC"
 			comparer = "<"
-			esk = "id #{comparer} 'Z'"
+			esk = "#{orderitem} < 'Z'"
 
 		if o.esk
 			if o.bylm 

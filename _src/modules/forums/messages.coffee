@@ -116,6 +116,7 @@ class Messages
 
 				utils.pgqry query, (err, data) ->
 					if err
+						console.log err
 						if err.detail?.indexOf("already exists") > -1
 							utils.throwError(cb, "messageExists")
 							return

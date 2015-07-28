@@ -148,7 +148,7 @@ class Communities
 				return
 			query =
 				name: "update community"
-				text: "UPDATE c SET v = get_unique_ts(), p = $1 WHERE id = $2 and v = $3 RETURNING #{FIELDS}"
+				text: "UPDATE c SET v = base36_timestamp(), p = $1 WHERE id = $2 and v = $3 RETURNING #{FIELDS}"
 				values: [
 					JSON.stringify(o.p)
 					o.cid
