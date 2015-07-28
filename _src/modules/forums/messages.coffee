@@ -116,7 +116,7 @@ class Messages
 
 				utils.pgqry query, (err, data) ->
 					if err
-						if err.detail.indexOf("already exists") > -1
+						if err.detail?.indexOf("already exists") > -1
 							utils.throwError(cb, "messageExists")
 							return
 						cb(err)
@@ -188,7 +188,6 @@ class Messages
 			if err
 				cb(err)
 				return
-
 			
 			cb(null, utils.messageQueryPrepare(resp.rows))
 			return

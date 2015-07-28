@@ -118,7 +118,7 @@ class Users
 						]
 					utils.pgqry query, (err, resp) ->
 						if err
-							if err.detail.indexOf("already exists") > -1
+							if err.detail?.indexOf("already exists") > -1
 								utils.throwError(cb, "userExists")
 								return
 							cb(err)
@@ -292,7 +292,7 @@ class Users
 			return
 		query =
 			name: "users of community #{o.type.join(",")}"
-			text: "SELECT #{o.type.join(",")} FROM u WHERE cid = $1 and id > $2 LIMIT 100"
+			text: "SELECT #{o.type.join(",")} FROM u WHERE cid = $1 and id > $2 ORDER BY ID LIMIT 100"
 			values: [
 				o.cid
 				o.id

@@ -135,7 +135,7 @@ class Threads
 
 			utils.pgqry query, (err, resp) ->
 				if err
-					if err.detail.indexOf("already exists") > -1
+					if err.detail?.indexOf("already exists") > -1
 						utils.throwError(cb, "threadExists")
 						return
 					cb(err)
@@ -202,7 +202,6 @@ class Threads
 			if resp.rowCount > 0
 				lastitem = _.last(resp.rows)
 				lastitem.lek = lastitem.id
-								
 
 			cb(null, utils.threadQueryPrepare(resp.rows))
 			return
