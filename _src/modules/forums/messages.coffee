@@ -182,9 +182,10 @@ class Messages
 				o.tid
 				o.limit
 			]
+		console.log query
 		if o.esk
-			query.values.push(esk)
-		console.log "QUERY", query.text, query.values
+			query.values.push(o.esk)
+
 		utils.pgqry query, (err, resp) ->
 			if err
 				cb(err)
