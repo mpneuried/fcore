@@ -175,14 +175,13 @@ class Messages
 			esk = "AND id #{comparer} $4"
 
 		query =
-			name: "messages by thread#{o.forward}#{Boolean(o.esk)}"
+			name: "messages by thread#{Boolean(o.forward)}#{Boolean(o.esk)}"
 			text: "SELECT #{FIELDS} FROM m WHERE fid = $1 and tid = $2 #{esk} ORDER BY ID #{order} LIMIT $3"
 			values: [
 				o.fid
 				o.tid
 				o.limit
 			]
-		console.log query
 		if o.esk
 			query.values.push(o.esk)
 
