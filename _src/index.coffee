@@ -19,7 +19,13 @@ root.utils = require "./modules/fcoreutils"
 root.express = require "express"
 
 Memcached = require "memcached"
-root.memcached = new Memcached(config.memcached)
+if process.env.MEMCACHED_SERVERS
+	mcconfig = JSON.parse(process.env.MEMCACHED_SERVERS)
+else 
+	mcconfig = config.memcached or "127.0.0.1:11211"
+	
+console.log "Connecting to Memcached:", mcconfig
+root.memcached = new Memcached(mcconfig)
 
 root.memcached.on 'issue', (details) ->
 	console.log "Memcached issue", details
