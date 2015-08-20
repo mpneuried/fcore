@@ -78,10 +78,12 @@ app.get "#{BASE}/:cid/users/:id", (req, res) ->
 	users.get req.params, _respond(res)
 	return
  
+
 # Delete
 app.delete "#{BASE}/:cid/users/:id", (req, res) ->
 	users.delete req.params, _respond(res)
 	return
+
 
 # get users
 app.get "#{BASE}/:cid/users", (req, res) ->
@@ -98,6 +100,12 @@ app.post "#{BASE}/:cid/users", (req, res) ->
 # Update
 app.post "#{BASE}/:cid/users/:id", (req, res) ->
 	users.update _.extend(req.body, req.params), _respond(res)
+	return
+
+
+# Messages by User
+app.get "#{BASE}/:cid/users/:id/msgcount", (req, res) ->
+	users.msgcount req.params, _respond(res)
 	return
 
 

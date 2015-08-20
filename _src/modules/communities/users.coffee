@@ -196,6 +196,30 @@ class Users
 			cb(null, utils.userQueryPrepare(resp.rows))
 			return
 		return
+
+
+	# Messagecount
+	#
+	# Returns the number of messages a single user has created in a community
+	#
+	msgcount: (o, cb) ->
+		if utils.validate(o, ["cid", "id"], cb) is false
+			return
+		query =
+			name: "msgcount"
+			text: "SELECT COUNT(*) AS msgcount FROM authors WHERE cid = $1 AND uid = $2"
+			values: [
+				o.cid
+				o.id
+			]
+		utils.pgqry query, (err, resp) ->
+			if err
+				cb(err)
+				return
+			o = resp.rows[0]
+			o.msgcount = parseInt(o.msgcount, 10)
+			cb(null, o)
+			return
 		return
 
 	# This will check an extid for a user object
