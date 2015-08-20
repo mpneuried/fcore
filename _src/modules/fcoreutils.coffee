@@ -188,7 +188,7 @@ class Utils
 						@throwError(cb, "invalidValue", {msg:"`#{item}` must be 9 characters long"})
 						return false
 					if not _VALID.ts.test(o[item][1...])
-						@throwError(cb, "invalidValue", {msg:"`#{item}` must only contain [a-zA-Z0-9-]"})
+						@throwError(cb, "invalidValue", {msg:"`#{item}` must only contain [a-zA-Z0-9]"})
 						return false
 				when "tpid"
 					if not o[item]?

@@ -31,25 +31,28 @@ class Communities
 
 	# Delete a community.
 	#
-	# Only allowed when no forums are found.
-	#
 	delete: (o, cb) ->
 		if utils.validate(o, ["cid"], cb) is false
 			return
-		query =
-			name: "delete community"
-			text: "DELETE FROM c WHERE id = $1 RETURNING #{FIELDS};"
-			values: [o.cid]
-		utils.pgqry query, (err, resp) ->
+		@get o, (err, resp) ->
 			if err
 				cb(err)
 				return
-			# Delete the cache for this community
-			memcached.del "#{mcprefix}#{o.cid}", (err) -> 
+			query =
+				name: "delete community"
+				text: "DELETE FROM c WHERE id = $1 RETURNING #{FIELDS};"
+				values: [o.cid]
+			utils.pgqry query, (err, resp) ->
 				if err
 					cb(err)
 					return
-				cb(null, utils.respPrepare(resp.rows[0]))
+				# Delete the cache for this community
+				memcached.del _mckey(o), (err) -> 
+					if err
+						cb(err)
+						return
+					cb(null, utils.respPrepare(resp.rows[0]))
+					return
 				return
 			return
 		return
@@ -58,8 +61,7 @@ class Communities
 	get: (o, cb) ->
 		if utils.validate(o, ["cid"], cb) is false
 			return
-		key = "#{mcprefix}#{o.cid}"
-		memcached.get key, (err, resp) ->
+		memcached.get _mckey(o), (err, resp) ->
 			if err
 				cb(err)
 				return
@@ -169,11 +171,12 @@ class Communities
 
 
 _cacheAndReturn = (data, cb) ->
-	key = "#{mcprefix}#{data.id}"
 	data = utils.respPrepare(data)
-	memcached.set key, data, 86400, ->
+	memcached.set _mckey({cid: data.id}), data, 86400, ->
 	cb(null, data)
 	return
 
+_mckey = (o) ->
+	return "#{mcprefix}#{o.cid}"
 
 module.exports = new Communities()

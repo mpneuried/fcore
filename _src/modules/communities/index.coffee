@@ -77,7 +77,11 @@ app.post "#{BASE}/:cid", (req, res) ->
 app.get "#{BASE}/:cid/users/:id", (req, res) ->
 	users.get req.params, _respond(res)
 	return
-
+ 
+# Delete
+app.delete "#{BASE}/:cid/users/:id", (req, res) ->
+	users.delete req.params, _respond(res)
+	return
 
 # get users
 app.get "#{BASE}/:cid/users", (req, res) ->

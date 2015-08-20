@@ -4,10 +4,10 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0
 if process.argv[2]? and process.argv[2] is "dev" or process.env.DEV
 	console.log "LOADING DEV Settings"
 	config = require "./config_dev.json"
-	root.devmode = true
+	devmode = true
 else
 	config = require "./config.json"
-	root.devmode = false
+	devmode = false
 
 morgan = require "morgan"
 compress = require "compression"
@@ -20,6 +20,13 @@ root.express = require "express"
 
 Memcached = require "memcached"
 root.memcached = new Memcached(config.memcached)
+
+root.memcached.on 'issue', (details) ->
+	console.log "Memcached issue", details
+	return
+root.memcached.on 'failure', (details) ->
+	console.log "Memcached failure", details
+	return
 
 long_cache = 24 * 3600 * 1000 * 90 # 90 days
 
@@ -34,7 +41,7 @@ root._handleError = (err, res, statuscode=403) ->
 	if err.name in ["threadNotFound", "messageNotFound", "forumNotFound", "userNotFound","communityNotFound"]
 		statuscode = 404
 	console.log "-> ERROR: [#{err.toString()}]"
-	if root.devmode
+	if devmode
 		console.log "--> STACK", err.stack
 	res.status(statuscode).send(JSON.stringify(err))
 	return
@@ -53,7 +60,7 @@ app.use(Forums)
 app.use (err, req, res, next) ->
 	# This will be called when for example an invalid JSON was supplied.
 	console.log "server.js app error: ", err
-	if root.devmode
+	if devmode
 		console.log "--> STACK", err.stack
 	
 	res.writeHead(500)

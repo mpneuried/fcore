@@ -8,12 +8,37 @@ FIELDS = "id, cid, c, v, p, extid"
 
 class Users
 
+	delete: (o, cb) ->
+		if utils.validate(o, ["id", "cid"], cb) is false
+			return
+		@get o, (err, resp) ->
+			if err
+				cb(err)
+				return
+			query =
+				name: "delete user"
+				text: "DELETE FROM u WHERE cid = $1 AND id = $2 RETURNING #{FIELDS};"
+				values: [o.cid, o.id]
+			utils.pgqry query, (err, resp) ->
+				if err
+					cb(err)
+					return
+				# Delete the cache for this user
+				memcached.del _mckey(o), (err) -> 
+					if err
+						cb(err)
+						return
+					cb(null, utils.respPrepare(resp.rows[0]))
+					return
+				return
+			return
+		return
+
 
 	get: (o, cb) ->
 		if utils.validate(o, ["id","cid"], cb) is false
 			return
-		key = "#{mcprefix}#{o.cid}_#{o.id}"
-		memcached.get key, (err, resp) ->
+		memcached.get _mckey(o), (err, resp) ->
 			if err
 				cb(err)
 				return
@@ -137,8 +162,8 @@ class Users
 	#
 	# Returns a list of all messages written by the user
 	#
-	# Will return 100 Messages. If 100 are returned there might be more.  
-	# User the `esk` URL Parameter with the 100th id of the result to get the next 100
+	# Will return the newest 25 Messages. If 25 are returned there might be more.  
+	# Use the `esk` URL Parameter with the 25rd id of the result to get the next 25
 	#
 	# Parameters:
 	#
@@ -150,31 +175,27 @@ class Users
 	# * `esk` (String) Exclusive Start Key: 
 	#
 	messagesByUser: (o, cb) ->
-		if utils.validate(o, ["cid","id"], cb) is false
+		if utils.validate(o, ["cid", "id", "esk"], cb) is false
 			return
-		params = 
-			TableName: TABLENAME
-			Limit: 100
-			AttributesToGet: ["id", "fid", "tid"]
-			KeyConditions:
-				pid:
-					ComparisonOperator: "EQ"
-					AttributeValueList: [
-						S: "#{o.cid}_#{o.id}"
-					]
-			ScanIndexForward: false
+		esk = ""
 		if o.esk
-			params.ExclusiveStartKey =
-				"id":
-					S: o.esk
-				"pid":
-					S: "#{o.cid}_#{o.id}"
-		utils.singlequery params, (err, resp) =>
+			esk = "AND mid < $3"
+		query =
+			name: "msgs by user#{Boolean(esk)}"
+			text: "SELECT mid, fid, tid, (SELECT p FROM t WHERE fid = authors.fid and id = authors.tid) AS t_p FROM authors WHERE cid = $1 AND uid = $2 #{esk} ORDER BY mid DESC LIMIT 25"
+			values: [
+				o.cid
+				o.id
+			]
+		if o.esk
+			query.values.push(o.esk)
+		utils.pgqry query, (err, resp) ->
 			if err
 				cb(err)
 				return
-			cb(null, utils.userQueryPrepare(resp))
+			cb(null, utils.userQueryPrepare(resp.rows))
 			return
+		return
 		return
 
 	# This will check an extid for a user object
@@ -328,10 +349,14 @@ class Users
 _cacheAndReturn = (data, cb) ->
 	key = "#{mcprefix}#{data.cid}_#{data.id}"
 	data = utils.respPrepare(data)
+	console.log data
 	memcached.set key, data, 86400, ->
 	cb(null, data)
 	return
 
+
+_mckey = (o) ->
+	return "#{mcprefix}#{o.cid}_#{o.id}"
 
 _preCheckUserId = (o, cb) ->
 	if o.id?
