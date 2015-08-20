@@ -1,7 +1,6 @@
-config = require "../config.json"
 _ = require "lodash"
 pg = require "pg"
-conString = "postgres://postgres:#{process.env.POSTGRESQL_PW or config.db.pw}@#{process.env.POSTGRESQL_HOST or config.db.host}/#{process.env.POSTGRESQL_NAME or config.db.name}"
+conString = "postgres://#{process.env.POSTGRESQL_USER or config.db.user}:#{process.env.POSTGRESQL_PW or config.db.pw}@#{process.env.POSTGRESQL_HOST or config.db.host}/#{process.env.POSTGRESQL_DBNAME or config.db.name}"
 
 LASTTIMESTAMP = 0
 

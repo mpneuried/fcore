@@ -373,7 +373,6 @@ class Users
 _cacheAndReturn = (data, cb) ->
 	key = "#{mcprefix}#{data.cid}_#{data.id}"
 	data = utils.respPrepare(data)
-	console.log data
 	memcached.set key, data, 86400, ->
 	cb(null, data)
 	return

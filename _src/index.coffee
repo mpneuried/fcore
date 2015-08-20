@@ -3,10 +3,10 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = 0
 
 if process.argv[2]? and process.argv[2] is "dev" or process.env.DEV
 	console.log "LOADING DEV Settings"
-	config = require "./config_dev.json"
+	root.config = require "./config_dev.json"
 	devmode = true
 else
-	config = require "./config.json"
+	root.config = require "./config.json"
 	devmode = false
 
 morgan = require "morgan"

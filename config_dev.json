@@ -1,7 +1,8 @@
 {
 	"db": {
 		"host": "172.31.16.97",
-		"name": "fcore"
+		"name": "fcore",
+		"user": "postgres"
 	},
 	"memcached": ["127.0.0.1:11211"],
 	"port": 8080
