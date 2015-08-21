@@ -164,7 +164,7 @@ class Threads
 	threadsByForum: (o, cb) ->
 		if utils.validate(o, ["fid", "esk", "bylm", "forward"], cb) is false
 			return
-
+		o = utils.limitCheck(o, 50, 50)
 		
 		order = "ORDER BY id"
 		orderitem = "id"

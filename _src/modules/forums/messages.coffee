@@ -156,13 +156,9 @@ class Messages
 	# * `limit` (String) Number of messages to return (Default: 50)
 	#
 	messagesByThread: (o, cb) ->
-		o.limit = parseInt(o.limit or 50, 10)
-		if o.limit > 50
-			o.limit = 50
-
 		if utils.validate(o, ["fid","tid","esk"], cb) is false
 			return
-
+		o = utils.limitCheck(o, 50, 50)
 		esk = ""
 		order = "DESC"
 		comparer = "<"

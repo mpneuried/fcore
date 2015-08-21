@@ -250,17 +250,17 @@ Note: The id will be saved as all **lowercase**. If you need to store the origin
             }
         }
         
-## Query [/c/{cid}/users?type={type}&esk={esk}]  
+## Query [/c/{cid}/users?type={type}&esk={esk}&limit={limit}]  
 
 + Parameters
     + cid (required, string, `123456_hxfu1234`) ... The id of the community.
     + type (optional, string, `id`) ... Either `id`, `p` or `all` to return just the id, properties or all. Default: `id`
     + esk (optional, string, `someusername`) ... Exclusive Start Key
+    + limit (optional, number, `10`) ... The amount of users to return. Default: 100 (min: 1, max: 500)
 
 ### Retrieve the users of a community [GET]
 
 Returns the users of a community.
-Maximum users returned is 100.
 User the `esk` URL parameter to retrieve the next users.
 
 
@@ -279,18 +279,34 @@ User the `esk` URL parameter to retrieve the next users.
             ...
         ]
         
-    
-## Query [/c/{cid}/users/:userid/query?esk=:esk]  
+## Query [/c/{cid}/users/:userid/msgcount]  
 
 + Parameters
     + cid (required, string, `123456_hxfu1234`) ... The id of the community.
     + userid (required, string, `JohnDoe`) ... The user id. **Will be converted to lowercase**
-    + esk (optional, string, `Mhx123abc`) ... Exclusive Start Key (a message id `id`)    
+
+### Retrieve the number of messages written by a user [GET]
+
+Returns the message count of a single user within this community
+
++ Response 200 (application/json)
+
+        {
+            "msgcount": 124
+        }
+        
+        
+## Query [/c/{cid}/users/:userid/query?esk=:esk&limit={limit}]  
+
++ Parameters
+    + cid (required, string, `123456_hxfu1234`) ... The id of the community.
+    + userid (required, string, `JohnDoe`) ... The user id. **Will be converted to lowercase**
+    + esk (optional, string, `Mhx123abc`) ... Exclusive Start Key (a message id `id`)
+    + limit (optional, number, `10`) ... The amount of messages to return. Default: 10 (min: 1, max: 50)
 
 ### Retrieve all messages by a user [GET]
 
 Returns all messages posted by a user in descending order (newest first).  
-Maximum messages returned is 25.  
 Use the `esk` URL parameter to retrieve the next messages.
 
 + Response 200 (application/json)
@@ -299,17 +315,26 @@ Use the `esk` URL parameter to retrieve the next messages.
             {
                 "fid": "Fhxvghdy4",
                 "tid": "Thxvpa5dz",
-                "id": "Mhxvpa5yk"
+                "id": "Mhxvpa5yk",
+                "t_p: {
+                    "title": "Thread title #1"
+                }
             },
             {
                 "fid": "Fhxvghdy4",
                 "tid": "Thxvpf77q",
-                "id": "Mhxvpf7r9"
+                "id": "Mhxvpf7r9",
+                "t_p: {
+                    "title": "Thread title #14"
+                }
             },
             {
                 "fid": "Fhxvghdy4",
                 "tid": "Thxvpf9y6",
-                "id": "Mhxvpfadw"
+                "id": "Mhxvpfadw",
+                "t_p: {
+                    "title": "Thread title #310"
+                }
             }
         ]
 
@@ -577,18 +602,18 @@ The updated forum.
         }
         
         
-## Query by Forum Id [/f/{fid}/query?esk=:esk&forward=:forward&bylm=:bylm]
+## Query by Forum Id [/f/{fid}/query?esk=:esk&forward=:forward&bylm=:bylm&limit={limit}]
 
 + Parameters
     + fid (required, string, `Fhxh3h311`) ... Forum id
     + esk (optional, string, `Mhx123abc`) ... Exclusive Start Key (a thread id `id` or `lm` if `bylm` is true)   
     + forward (optional, string, `true`) ... `true` for newest first or `false` for oldest first. 
     + bylm (optional, string, `true`) ... `true` to sort by lastMsgDate (`lm`)
+    + limit (optional, number, `10`) ... The amount of threads to return. Default: 50 (min: 1, max: 50)
 
 ### Retrieve all threads of a single `fid` [GET]
 
 Returns all threads of a forum in descending order (newest first).  
-Maximum threads returned is 50.  
 Use the supplied `lek` item in the last repsonse item with the `esk` URL parameter for paging.
 
 + Response 200 (application/json)

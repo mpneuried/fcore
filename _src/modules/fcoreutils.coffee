@@ -40,6 +40,23 @@ class Utils
 		return true
 
 
+	# limitCheck
+	#
+	# Check an o.limit value
+	#
+	# Parameters:
+	#
+	# * o (Object): The object of which an o.limit value should be checked
+	# * d (Number): The default value if o.limit is undefined of falsy
+	# * m: The max value to which o.limit will be reduced if bigger
+	#
+	limitCheck: (o, d, m) ->
+		o.limit = parseInt(o.limit or d, 10)
+		if _.isNaN(o.limit) or o.limit > m or o.limit < 1
+			o.limit = m
+		return o
+
+
 	messageQueryPrepare: (items) ->
 		for e in items
 			@messagePrepare(e)

@@ -162,13 +162,14 @@ class Users
 	#
 	# Returns a list of all messages written by the user
 	#
-	# Will return the newest 25 Messages. If 25 are returned there might be more.  
-	# Use the `esk` URL Parameter with the 25rd id of the result to get the next 25
+	# Will return the newest `limit` Messages.  
+	# Use the `esk` URL Parameter with the last id of the result to get the next messages.
 	#
 	# Parameters:
 	#
 	# * `id` (String) User Id
 	# * `cid` (String) Community Id
+	# * `limit` (Number) Default: 10 The max amount of messages to retrieve. Maximum: 50
 	#
 	# URL Parameters:
 	#
@@ -177,15 +178,17 @@ class Users
 	messagesByUser: (o, cb) ->
 		if utils.validate(o, ["cid", "id", "esk"], cb) is false
 			return
+		o = utils.limitCheck(o, 10, 50)
 		esk = ""
 		if o.esk
-			esk = "AND mid < $3"
+			esk = "AND mid < $4"
 		query =
 			name: "msgs by user#{Boolean(esk)}"
-			text: "SELECT mid, fid, tid, (SELECT p FROM t WHERE fid = authors.fid and id = authors.tid) AS t_p FROM authors WHERE cid = $1 AND uid = $2 #{esk} ORDER BY mid DESC LIMIT 25"
+			text: "SELECT mid, fid, tid, (SELECT p FROM t WHERE fid = authors.fid and id = authors.tid) AS t_p FROM authors WHERE cid = $1 AND uid = $2 #{esk} ORDER BY mid DESC LIMIT $3"
 			values: [
 				o.cid
 				o.id
+				o.limit
 			]
 		if o.esk
 			query.values.push(o.esk)
@@ -325,6 +328,7 @@ class Users
     # + cid (required, string, `123456_hxfu1234`) ... The id of the community.
     # + type (optional, string, `id`) ... Either `id`, `p` or `all` to return just the id, properties or all. Default: `id`
     # + esk (optional, string, `someusername`) ... Exclusive Start Key
+    # + limit (optional, number, `10`) ... The amount of users to return. Default: 100 (min: 1, max: 500)
 	#
 	users: (o, cb) ->
 		tovalidate = ["cid","type"]
@@ -335,12 +339,14 @@ class Users
 			tovalidate.push("id")
 		if utils.validate(o, tovalidate, cb) is false
 			return
+		o = utils.limitCheck(o, 100, 500)
 		query =
 			name: "users of community #{o.type.join(",")}"
-			text: "SELECT #{o.type.join(",")} FROM u WHERE cid = $1 and id > $2 ORDER BY ID LIMIT 100"
+			text: "SELECT #{o.type.join(",")} FROM u WHERE cid = $1 and id > $2 ORDER BY ID LIMIT $3"
 			values: [
 				o.cid
 				o.id
+				o.limit
 			]
 		utils.pgqry query, (err, resp) ->
 			if err
