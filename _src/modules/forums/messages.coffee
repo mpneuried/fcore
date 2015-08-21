@@ -173,9 +173,8 @@ class Messages
 
 		if o.esk
 			esk = "AND id #{comparer} $4"
-
 		query =
-			name: "messages by thread#{Boolean(o.forward)}#{Boolean(o.esk)}"
+			name: "messages by thread#{o.forward is "true"}#{Boolean(o.esk)}"
 			text: "SELECT #{FIELDS} FROM m WHERE fid = $1 and tid = $2 #{esk} ORDER BY ID #{order} LIMIT $3"
 			values: [
 				o.fid
@@ -184,7 +183,6 @@ class Messages
 			]
 		if o.esk
 			query.values.push(o.esk)
-
 		utils.pgqry query, (err, resp) ->
 			if err
 				cb(err)
