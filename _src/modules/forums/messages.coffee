@@ -1,5 +1,3 @@
-mcprefix = "fc_m"
-
 _ = require "lodash"
 users = null
 threads = null
@@ -40,7 +38,7 @@ class Messages
 	get: (o, cb) ->
 		if utils.validate(o, ["fid","tid","mid"], cb) is false
 			return
-		key = "#{mcprefix}#{o.mid}"
+		key = "#{root.MCPREFIX}#{o.mid}"
 		memcached.get key, (err, resp) ->
 			if err
 				cb(err)
@@ -116,27 +114,35 @@ class Messages
 
 				utils.pgqry query, (err, data) ->
 					if err
-						console.log err
 						if err.detail?.indexOf("already exists") > -1
 							utils.throwError(cb, "messageExists")
 							return
 						cb(err)
 						return
 					msg = data.rows[0]
-					threads.get _.extend(o, {nocache:1}), (err, thread) ->
+					utils.mcFlush o.tid, (err) ->
 						if err
 							cb(err)
 							return
-						# We return the thread and the message
-						result = 
-							thread: thread
-
-						_cacheAndReturn msg, (err, resp) ->
+						threads.get o, (err, thread) ->
 							if err
 								cb(err)
 								return
-							result.message = resp							
-							cb(null, result)
+							# We return the thread and the message
+							result = 
+								thread: thread
+							utils.mcFlush o.fid, (err) ->
+								if err
+									cb(err)
+									return
+								_cacheAndReturn msg, (err, resp) ->
+									if err
+										cb(err)
+										return
+									result.message = resp							
+									cb(null, result)
+									return
+								return
 							return
 						return
 					return
@@ -235,7 +241,7 @@ class Messages
 					if resp.rowCount is 0
 						utils.throwError(cb, "invalidVersion")
 						return
-					threads.flush {fid: o.fid, id: o.tid}, (err) ->
+					utils.mcFlush o.tid, (err) ->
 						if err
 							cb(err)
 							return
@@ -254,7 +260,7 @@ _cacheAndReturn = (msg, cb) ->
 	return
 
 _mckey = (o) ->
-	return "#{mcprefix}#{o.id}"
+	return "#{root.MCPREFIX}#{o.id}"
 
 module.exports = new Messages()
 

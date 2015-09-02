@@ -1,7 +1,5 @@
 _ = require "lodash"
 communities = null
-threads = null
-mcprefix = "fc_f"
 
 FIELDS = "id, cid, v, p, tt, tm"
 
@@ -91,16 +89,6 @@ class Forums
 					cb(null, utils.respPrepare(resp.rows[0]))
 					return
 				return
-		return
-
-
-	flush: (o, cb) ->
-		memcached.del _mckey(o), (err) ->
-			if err
-				cb(err)
-				return
-			cb(null, true)
-			return
 		return
 
 
@@ -237,9 +225,8 @@ _cacheAndReturn = (data, cb) ->
 	return
 
 _mckey = (o) ->
-	return "#{mcprefix}#{o.id}"
+	return "#{root.MCPREFIX}#{o.id}"
 
 module.exports = new Forums()
 
 communities = require "../communities/communities"
-threads = require "./threads"

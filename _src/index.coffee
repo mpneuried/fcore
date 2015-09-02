@@ -34,6 +34,10 @@ root.memcached.on 'failure', (details) ->
 	console.log "Memcached failure", details
 	return
 
+# Memcached Prefix Config
+root.MCPREFIX = "fc_"
+
+
 long_cache = 24 * 3600 * 1000 * 90 # 90 days
 
 app = express()

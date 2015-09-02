@@ -24,6 +24,16 @@ class Utils
 			@respPrepare(e)
 
 
+	mcFlush : (id, cb) ->
+		memcached.del "#{root.MCPREFIX}#{id}", (err) ->
+			if err
+				cb(err)
+				return
+			cb(null, true)
+			return
+		return
+
+
 	getRandomInt: (min, max) ->
 		return Math.floor(Math.random() * (max - min)) + min
 
@@ -109,7 +119,7 @@ class Utils
 
 	threadQueryPrepare: (items) ->
 		for e in items
-			@respPrepare(e)
+			@threadPrepare(e)
 
 
 	throwError: (cb, err, data={}) ->

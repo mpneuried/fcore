@@ -377,15 +377,14 @@ class Users
 
 
 _cacheAndReturn = (data, cb) ->
-	key = "#{mcprefix}#{data.cid}_#{data.id}"
 	data = utils.respPrepare(data)
-	memcached.set key, data, 86400, ->
+	memcached.set _mckey(data), data, 86400, ->
 	cb(null, data)
 	return
 
 
 _mckey = (o) ->
-	return "#{mcprefix}#{o.cid}_#{o.id}"
+	return "#{root.MCPREFIX}#{o.cid}_#{o.id}"
 
 _preCheckUserId = (o, cb) ->
 	if o.id?

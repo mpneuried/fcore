@@ -1,7 +1,5 @@
 _ = require "lodash"
 
-mcprefix = "fc_c"
-
 FIELDS = "id, v, p"
 
 class Communities
@@ -177,6 +175,6 @@ _cacheAndReturn = (data, cb) ->
 	return
 
 _mckey = (o) ->
-	return "#{mcprefix}#{o.cid}"
+	return "#{root.MCPREFIX}#{o.cid}"
 
 module.exports = new Communities()

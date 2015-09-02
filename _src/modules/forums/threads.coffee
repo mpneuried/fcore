@@ -3,8 +3,6 @@ forums = null
 users = null
 messages = null
 
-mcprefix = "fc_t"
-
 FIELDS = "id, fid, a, v, la, lm, tm, p, top"
 
 class Threads
@@ -37,7 +35,7 @@ class Threads
 					if err
 						cb(err)
 						return
-					forums.flush o, (err) ->
+					utils.mcFlush o.fid, (err) ->
 						if err
 							cb(err)
 							return
@@ -45,17 +43,6 @@ class Threads
 						return
 					return
 				return
-			return
-		return
-
-
-	flush: (o, cb) ->
-		console.log "flush threads",_mckey(o)
-		memcached.del _mckey(o), (err) ->
-			if err
-				cb(err)
-				return
-			cb(null, true)
 			return
 		return
 
@@ -144,7 +131,7 @@ class Threads
 				if resp.rowCount isnt 1
 					utils.throwError(cb, "insertFailed")
 					return
-				forums.flush {id: o.fid}, (err) ->
+				utils.mcFlush o.fid, (err) ->
 					if err
 						cb(err)
 						return
@@ -251,11 +238,10 @@ class Threads
 					utils.throwError(cb, "invalidVersion")
 					return
 
-				forums.flush o, (err) ->
+				utils.mcFlush o.fid, (err) ->
 					if err
 						cb(err)
 						return
-					console.log resp.rows[0]
 					_cacheAndReturn(resp.rows[0], cb)
 					return
 				return
@@ -293,14 +279,11 @@ _cacheAndReturn = (data, cb) ->
 	cb(null, data)
 	return
 
+
 _mckey = (o) ->
-	cachebuster = ""
-	if o.nocache
-		cachebuster = Math.random()
-	return "#{mcprefix}#{o.fid}_#{o.id}#{cachebuster}"
+	return "#{root.MCPREFIX}#{o.id}"
 
 module.exports = new Threads()
 
-forums = require "./forums"
 users = require "../communities/users"
 messages = require "./messages"
