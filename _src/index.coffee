@@ -37,7 +37,6 @@ root.memcached.on 'failure', (details) ->
 # Memcached Prefix Config
 root.MCPREFIX = "fc_"
 
-
 long_cache = 24 * 3600 * 1000 * 90 # 90 days
 
 app = express()
@@ -72,9 +71,7 @@ app.use (err, req, res, next) ->
 	console.log "server.js app error: ", err
 	if devmode
 		console.log "--> STACK", err.stack
-	
 	res.writeHead(500)
-	# res.end('{"error":"Invalid format. Syntax error."}')
 	res.end(JSON.stringify(err))
 	return
 

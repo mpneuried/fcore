@@ -18,7 +18,8 @@
     "lodash": "*",
     "memcached": "*",
     "morgan": "*",
-    "serve-favicon": "*"
+    "serve-favicon": "*",
+    "rsmq": "*"
   },
   "devDependencies": {
     "clone": "*",

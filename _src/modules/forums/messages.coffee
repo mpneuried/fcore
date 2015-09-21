@@ -6,7 +6,7 @@ FIELDS = ["id, tid, fid, a, p, v, cid"]
 
 class Messages
 	delete: (o, cb) ->
-		if utils.validate(o, ["fid","tid","mid"], cb) is false
+		if root.utils.validate(o, ["fid","tid","mid"], cb) is false
 			return
 		query =
 			name: "delete msg"
@@ -16,12 +16,12 @@ class Messages
 				o.tid
 				o.mid
 			]
-		utils.pgqry query, (err, msg) ->
+		root.utils.pgqry query, (err, msg) ->
 			if err
 				cb(err)
 				return
 			if msg.rowCount is 0
-				utils.throwError(cb, "messageNotFound")
+				root.utils.throwError(cb, "messageNotFound")
 				return
 
 			# Delete Memcached Entry
@@ -30,13 +30,18 @@ class Messages
 				if err
 					cb(err)
 					return
-				cb(null, {thread: thread, message: utils.messagePrepare(msg.rows[0])})
+				root.utils.sendMessage {action:"d", type:"m", fid: o.fid, tid: o.tid, mid: o.mid}, (err) ->
+					if err
+						cb(err)
+						return
+					cb(null, {thread: thread, message: root.utils.messagePrepare(msg.rows[0])})
+					return
 				return			
 			return
 		return
 
 	get: (o, cb) ->
-		if utils.validate(o, ["fid","tid","mid"], cb) is false
+		if root.utils.validate(o, ["fid","tid","mid"], cb) is false
 			return
 		key = "#{root.MCPREFIX}#{o.mid}"
 		memcached.get key, (err, resp) ->
@@ -55,12 +60,12 @@ class Messages
 					o.tid
 					o.mid
 				]
-			utils.pgqry query, (err, resp) ->
+			root.utils.pgqry query, (err, resp) ->
 				if err
 					cb(err)
 					return
 				if resp.rowCount is 0
-					utils.throwError(cb, "messageNotFound")
+					root.utils.throwError(cb, "messageNotFound")
 					return
 				_cacheAndReturn(resp.rows[0], cb)
 				return
@@ -77,7 +82,7 @@ class Messages
 	# * `p` (Object) Properties
 	#
 	insert: (o, cb) ->
-		if utils.validate(o, ["fid","a","p","tid","ts"], cb) is false
+		if root.utils.validate(o, ["fid","a","p","tid","ts"], cb) is false
 			return
 		users.verify o, (err, user) ->
 			if err
@@ -97,7 +102,7 @@ class Messages
 							o.tid
 							o.fid
 							o.a
-							utils.storeProps(o.p)
+							root.utils.storeProps(o.p)
 							user.cid
 						]
 				else
@@ -108,19 +113,20 @@ class Messages
 							o.tid
 							o.fid
 							o.a
-							utils.storeProps(o.p)
+							root.utils.storeProps(o.p)
 							user.cid
 						]
 
-				utils.pgqry query, (err, data) ->
+				root.utils.pgqry query, (err, data) ->
 					if err
 						if err.detail?.indexOf("already exists") > -1
-							utils.throwError(cb, "messageExists")
+							root.utils.throwError(cb, "messageExists")
 							return
 						cb(err)
 						return
 					msg = data.rows[0]
-					utils.mcFlush o.tid, (err) ->
+					
+					root.utils.mcFlush o.tid, (err) ->
 						if err
 							cb(err)
 							return
@@ -128,19 +134,29 @@ class Messages
 							if err
 								cb(err)
 								return
-							# We return the thread and the message
-							result = 
-								thread: thread
-							utils.mcFlush o.fid, (err) ->
+					
+							root.utils.sendMessage {action:"i", type:"m", cid: user.cid, fid: o.fid, tid: o.tid, mid: msg.id, v: msg.v}, (err) ->
 								if err
 									cb(err)
 									return
-								_cacheAndReturn msg, (err, resp) ->
+								#
+								# action: i
+								# cid, fid, tid, mid, v
+
+								# We return the thread and the message
+								result = 
+									thread: thread
+								root.utils.mcFlush o.fid, (err) ->
 									if err
 										cb(err)
 										return
-									result.message = resp							
-									cb(null, result)
+									_cacheAndReturn msg, (err, resp) ->
+										if err
+											cb(err)
+											return
+										result.message = resp							
+										cb(null, result)
+										return
 									return
 								return
 							return
@@ -162,9 +178,9 @@ class Messages
 	# * `limit` (String) Number of messages to return (Default: 50)
 	#
 	messagesByThread: (o, cb) ->
-		if utils.validate(o, ["fid","tid","esk"], cb) is false
+		if root.utils.validate(o, ["fid","tid","esk"], cb) is false
 			return
-		o = utils.limitCheck(o, 50, 50)
+		o = root.utils.limitCheck(o, 50, 50)
 		esk = ""
 		order = "DESC"
 		comparer = "<"
@@ -185,18 +201,18 @@ class Messages
 			]
 		if o.esk
 			query.values.push(o.esk)
-		utils.pgqry query, (err, resp) ->
+		root.utils.pgqry query, (err, resp) ->
 			if err
 				cb(err)
 				return
 			
-			cb(null, utils.messageQueryPrepare(resp.rows))
+			cb(null, root.utils.messageQueryPrepare(resp.rows))
 			return
 		return
 
 	# Update a message
 	update: (o, cb) ->
-		if utils.validate(o, ["fid","tid","mid","a","p","v"], cb) is false
+		if root.utils.validate(o, ["fid","tid","mid","a","p","v"], cb) is false
 			return
 		# Make sure this user exists
 		users.verify o, (err, resp) =>
@@ -208,8 +224,8 @@ class Messages
 					cb(err)
 					return
 
-				o.p = utils.cleanProps(resp.p, o.p)
-				if utils.validate(o, ["p"], cb) is false
+				o.p = root.utils.cleanProps(resp.p, o.p)
+				if root.utils.validate(o, ["p"], cb) is false
 					return
 
 				# Nothing changed. Bail out and return the current item.
@@ -218,7 +234,7 @@ class Messages
 					return
 				
 				if resp.v isnt o.v
-					utils.throwError(cb, "invalidVersion")
+					root.utils.throwError(cb, "invalidVersion")
 					return
 
 
@@ -234,18 +250,23 @@ class Messages
 						o.v
 					]					
 
-				utils.pgqry query, (err, resp) ->
+				root.utils.pgqry query, (err, resp) ->
 					if err
 						cb(err)
 						return
 					if resp.rowCount is 0
-						utils.throwError(cb, "invalidVersion")
+						root.utils.throwError(cb, "invalidVersion")
 						return
-					utils.mcFlush o.tid, (err) ->
+					root.utils.sendMessage {action:"u", type:"m", fid: o.fid, tid: o.tid, mid: o.mid, v: resp.rows[0].v}, (err) ->
 						if err
 							cb(err)
 							return
-						_cacheAndReturn(resp.rows[0], cb)
+						root.utils.mcFlush o.tid, (err) ->
+							if err
+								cb(err)
+								return
+							_cacheAndReturn(resp.rows[0], cb)
+							return
 						return
 					return	
 				return
@@ -254,7 +275,7 @@ class Messages
 
 
 _cacheAndReturn = (msg, cb) ->
-	msg = utils.messagePrepare(msg)
+	msg = root.utils.messagePrepare(msg)
 	memcached.set _mckey(msg), msg, 86400, ->
 	cb(null, msg)
 	return

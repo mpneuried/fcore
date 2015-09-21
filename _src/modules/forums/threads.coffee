@@ -9,7 +9,7 @@ class Threads
 
 
 	delete: (o, cb) ->
-		if utils.validate(o, ["tid","fid"], cb) is false
+		if root.utils.validate(o, ["tid","fid"], cb) is false
 			return
 		@get o, (err, resp) ->
 			if err
@@ -22,12 +22,12 @@ class Threads
 					o.fid
 					o.tid
 				]
-			utils.pgqry query, (err, resp) ->
+			root.utils.pgqry query, (err, resp) ->
 				if err
 					cb(err)
 					return
 				if resp.rowCount is 0
-					utils.throwError(cb, "threadNotFound")
+					root.utils.throwError(cb, "threadNotFound")
 					return
 				
 				# Delete the cache for this thread
@@ -35,11 +35,16 @@ class Threads
 					if err
 						cb(err)
 						return
-					utils.mcFlush o.fid, (err) ->
+					root.utils.mcFlush o.fid, (err) ->
 						if err
 							cb(err)
 							return
-						cb(null, utils.respPrepare(resp.rows[0]))
+						root.utils.sendMessage {action:"d", type:"t", fid: o.fid, tid: o.tid}, (err) ->
+							if err
+								cb(err)
+								return
+							cb(null, root.utils.respPrepare(resp.rows[0]))
+							return
 						return
 					return
 				return
@@ -48,7 +53,7 @@ class Threads
 
 
 	get: (o, cb) ->
-		if utils.validate(o, ["tid","fid"], cb) is false
+		if root.utils.validate(o, ["tid","fid"], cb) is false
 			return
 		memcached.get _mckey(o), (err, resp) ->
 			if err
@@ -67,12 +72,12 @@ class Threads
 					o.tid
 				]
 				
-			utils.pgqry query, (err, resp) ->
+			root.utils.pgqry query, (err, resp) ->
 				if err
 					cb(err)
 					return
 				if resp.rowCount is 0
-					utils.throwError(cb, "threadNotFound")
+					root.utils.throwError(cb, "threadNotFound")
 					return
 				_cacheAndReturn(resp.rows[0], cb)
 				return
@@ -89,7 +94,7 @@ class Threads
 	# * `p` (Object) Properties object
 	#
 	insert: (o, cb) ->
-		if utils.validate(o, ["fid","a","p","ts","top"], cb) is false
+		if root.utils.validate(o, ["fid","a","p","ts","top"], cb) is false
 			return
 		# We verify the user for this forums community and return his name and community id.
 		users.verify o, (err, user) ->
@@ -106,7 +111,7 @@ class Threads
 						o.fid
 						o.a
 						o.top
-						utils.storeProps(o.p)
+						root.utils.storeProps(o.p)
 					]
 			else
 				query =
@@ -116,22 +121,22 @@ class Threads
 						o.fid
 						o.a
 						o.top
-						utils.storeProps(o.p)
+						root.utils.storeProps(o.p)
 					]
 
 
-			utils.pgqry query, (err, resp) ->
+			root.utils.pgqry query, (err, resp) ->
 				if err
 					if err.detail?.indexOf("already exists") > -1
-						utils.throwError(cb, "threadExists")
+						root.utils.throwError(cb, "threadExists")
 						return
 					cb(err)
 					return
 
 				if resp.rowCount isnt 1
-					utils.throwError(cb, "insertFailed")
+					root.utils.throwError(cb, "insertFailed")
 					return
-				utils.mcFlush o.fid, (err) ->
+				root.utils.mcFlush o.fid, (err) ->
 					if err
 						cb(err)
 						return
@@ -149,9 +154,9 @@ class Threads
 	# * `fid` (String) Forum Id
 	#
 	threadsByForum: (o, cb) ->
-		if utils.validate(o, ["fid", "esk", "bylm", "forward"], cb) is false
+		if root.utils.validate(o, ["fid", "esk", "bylm", "forward"], cb) is false
 			return
-		o = utils.limitCheck(o, 50, 50)
+		o = root.utils.limitCheck(o, 50, 50)
 		
 		order = "ORDER BY id"
 		orderitem = "id"
@@ -181,7 +186,7 @@ class Threads
 			]
 		if o.esk
 			query.values.push(esk)
-		utils.pgqry query, (err, resp) =>
+		root.utils.pgqry query, (err, resp) =>
 			if err
 				cb(err)
 				return
@@ -189,21 +194,21 @@ class Threads
 				lastitem = _.last(resp.rows)
 				lastitem.lek = lastitem.id
 
-			cb(null, utils.threadQueryPrepare(resp.rows))
+			cb(null, root.utils.threadQueryPrepare(resp.rows))
 			return
 		return
 
 
 	update: (o, cb) ->
-		if utils.validate(o, ["tid","fid","p","v","top"], cb) is false
+		if root.utils.validate(o, ["tid","fid","p","v","top"], cb) is false
 			return
 		@get o, (err, resp) ->
 			if err
 				cb(err)
 				return
 		
-			o.p = utils.cleanProps(resp.p, o.p)
-			if utils.validate(o, ["p"], cb) is false
+			o.p = root.utils.cleanProps(resp.p, o.p)
+			if root.utils.validate(o, ["p"], cb) is false
 				return
 
 			# Nothing changed. Bail out and return the current item.
@@ -212,7 +217,7 @@ class Threads
 				return
 
 			if resp.v isnt o.v
-				utils.throwError(cb, "invalidVersion")
+				root.utils.throwError(cb, "invalidVersion")
 				return
 
 			lm = _.capitalize(resp.lm)
@@ -230,15 +235,15 @@ class Threads
 					o.fid
 					o.tid
 				]
-			utils.pgqry query, (err, resp) ->
+			root.utils.pgqry query, (err, resp) ->
 				if err
 					cb(err)
 					return
 				if resp.rowCount is 0
-					utils.throwError(cb, "invalidVersion")
+					root.utils.throwError(cb, "invalidVersion")
 					return
 
-				utils.mcFlush o.fid, (err) ->
+				root.utils.mcFlush o.fid, (err) ->
 					if err
 						cb(err)
 						return
@@ -273,7 +278,7 @@ _stickyUnchanged = (resp, o) ->
 
 
 _cacheAndReturn = (data, cb) ->
-	data = utils.threadPrepare(data)
+	data = root.utils.threadPrepare(data)
 	if data.id
 		memcached.set _mckey(data), data, 86400, ->
 	cb(null, data)

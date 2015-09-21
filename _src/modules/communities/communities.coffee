@@ -10,7 +10,7 @@ class Communities
 	# * `tpid` (String)
 	#
 	bytpid: (o, cb) ->
-		if utils.validate(o, ["tpid"], cb) is false
+		if root.utils.validate(o, ["tpid"], cb) is false
 			return
 		query = 
 			name: "communities by tpid"
@@ -30,7 +30,7 @@ class Communities
 	# Delete a community.
 	#
 	delete: (o, cb) ->
-		if utils.validate(o, ["cid"], cb) is false
+		if root.utils.validate(o, ["cid"], cb) is false
 			return
 		@get o, (err, resp) ->
 			if err
@@ -49,7 +49,12 @@ class Communities
 					if err
 						cb(err)
 						return
-					cb(null, utils.respPrepare(resp.rows[0]))
+					root.utils.sendMessage {action:"d", type:"c", cid: o.cid}, (err) ->
+						if err
+							cb(err)
+							return
+						cb(null, utils.respPrepare(resp.rows[0]))
+						return
 					return
 				return
 			return
@@ -57,7 +62,7 @@ class Communities
 
 
 	get: (o, cb) ->
-		if utils.validate(o, ["cid"], cb) is false
+		if root.utils.validate(o, ["cid"], cb) is false
 			return
 		memcached.get _mckey(o), (err, resp) ->
 			if err
@@ -97,7 +102,7 @@ class Communities
 	#
 	insert: (o, cb) ->
 		that = @
-		if utils.validate(o, ["tpid","p"], cb) is false
+		if root.utils.validate(o, ["tpid","p"], cb) is false
 			return
 		query =
 			name: "insert community"
@@ -128,7 +133,7 @@ class Communities
 	#
 	update: (o, cb) ->
 		that = @
-		if utils.validate(o, ["cid","p","v"], cb) is false
+		if root.utils.validate(o, ["cid","p","v"], cb) is false
 			return
 		@get o, (err, data) ->
 			if err
@@ -139,7 +144,7 @@ class Communities
 				return
 
 			o.p = utils.cleanProps(data.p, o.p)
-			if utils.validate(o, ["p"], cb) is false
+			if root.utils.validate(o, ["p"], cb) is false
 				return
 
 			# Nothing changed. Bail out and return the current item.

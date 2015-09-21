@@ -2,6 +2,21 @@ _ = require "lodash"
 pg = require "pg"
 conString = "postgres://#{process.env.POSTGRESQL_USER or config.db.user}:#{process.env.POSTGRESQL_PW or config.db.pw}@#{process.env.POSTGRESQL_HOST or config.db.host}/#{process.env.POSTGRESQL_DBNAME or config.db.name}"
 
+if root.config.rsmq?
+	RedisSMQ = require("rsmq")
+	rsmq = new RedisSMQ( root.config.rsmq )
+	rsmq.createQueue root.config.messages.queue, (err, resp) ->
+		if err
+			if err.message? and err.message is "Queue exists"
+				console.log "OK: RSMQ Queue exists."
+			else
+				console.log err
+			return
+		if resp
+			console.log "OK: RSMQ Queue created."
+			return
+
+
 LASTTIMESTAMP = 0
 
 class Utils
@@ -101,6 +116,15 @@ class Utils
 		if _.isString(item.p)
 			item.p = JSON.parse(item.p)
 		return item
+
+
+	# Send a message to a queue to further work on it
+	# for example to index it in Elasticsearch
+	sendMessage: (message, cb) ->
+		if _.isObject(message)
+			message = JSON.stringify(message)
+		rsmq.sendMessage {qname: root.config.messages.queue.qname, message}, cb
+		return
 
 
 	storeProps: (p) ->
@@ -287,6 +311,5 @@ _initErrors = ->
 
 
 _initErrors()
-
 
 module.exports = new Utils()

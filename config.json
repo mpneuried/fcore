@@ -1,10 +1,29 @@
 {
 	"db": {
-		"host": "192.168.1.2",
+		"host": "172.31.16.97",
 		"name": "fcore",
 		"user": "postgres"
 	},
-	"memcached": ["172.31.20.0:11211"],
-	"port": 8080
 
+	"port": 8080,
+
+	"rsmq": {
+		"host": "172.31.20.0",
+		"port": 6379,
+		"ns": "fcidx"
+	},
+	
+	"messages": {
+		
+		"queue": {
+			"qname": "fcq"
+		},
+
+		"hooks": {
+			"c": ["d"],
+			"f": ["d"],
+			"t": ["d"],
+			"m": ["i","u","d"]
+		}
+	}
 }

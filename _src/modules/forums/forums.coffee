@@ -12,7 +12,7 @@ class Forums
 	# * `cid` (String)
 	#
 	bycid: (o, cb) ->
-		if utils.validate(o, ["cid"], cb) is false
+		if root.utils.validate(o, ["cid"], cb) is false
 			return
 		query =
 			name: "forums by cid"
@@ -22,11 +22,11 @@ class Forums
 			]
 
 
-		utils.pgqry query, (err, resp) ->
+		root.utils.pgqry query, (err, resp) ->
 			if err
 				cb(err)
 				return
-			cb(null, utils.forumQueryPrepare(resp.rows))
+			cb(null, root.utils.forumQueryPrepare(resp.rows))
 			return
 		return
 
@@ -38,7 +38,7 @@ class Forums
 	# * `tpid` (String)
 	#
 	bytpid: (o, cb) ->
-		if utils.validate(o, ["tpid"], cb) is false
+		if root.utils.validate(o, ["tpid"], cb) is false
 			return
 		query =
 			name: "forums by tpid"
@@ -48,11 +48,11 @@ class Forums
 			]
 
 
-		utils.pgqry query, (err, resp) ->
+		root.utils.pgqry query, (err, resp) ->
 			if err
 				cb(err)
 				return
-			cb(null, utils.forumQueryPrepare(resp.rows))
+			cb(null, root.utils.forumQueryPrepare(resp.rows))
 			return
 		return
 
@@ -62,7 +62,7 @@ class Forums
 	# * Queue the forum for deletion
 	#
 	delete: (o, cb) ->
-		if utils.validate(o, ["fid"], cb) is false
+		if root.utils.validate(o, ["fid"], cb) is false
 			return
 		@get o, (err, forum) ->
 			if err
@@ -74,26 +74,31 @@ class Forums
 				values: [
 					o.fid
 				]
-			utils.pgqry query, (err, resp) ->
+			root.utils.pgqry query, (err, resp) ->
 				if err
 					cb(err)
 					return
 				if resp.rowCount is 0
-					utils.throwError(cb, "forumNotFound")
+					root.utils.throwError(cb, "forumNotFound")
 					return
 				# Delete the cache for this forum
 				memcached.del _mckey(o), (err) -> 
 					if err
 						cb(err)
 						return
-					cb(null, utils.respPrepare(resp.rows[0]))
+					root.utils.sendMessage {action:"d", type:"f", fid: o.fid}, (err) ->
+						if err
+							cb(err)
+							return
+						cb(null, root.utils.respPrepare(resp.rows[0]))
+						return
 					return
 				return
 		return
 
 
 	get: (o, cb) ->
-		if utils.validate(o, ["fid"], cb) is false
+		if root.utils.validate(o, ["fid"], cb) is false
 			return
 		memcached.get _mckey({id: o.fid}), (err, resp) ->
 			if err
@@ -110,12 +115,12 @@ class Forums
 				values: [
 					o.fid
 				]
-			utils.pgqry query, (err, data) ->
+			root.utils.pgqry query, (err, data) ->
 				if err
 					cb(err)
 					return
 				if not data.rows.length 
-					utils.throwError(cb, "forumNotFound")
+					root.utils.throwError(cb, "forumNotFound")
 					return
 
 				_cacheAndReturn(data.rows[0], cb)
@@ -136,7 +141,7 @@ class Forums
 	#
 	insert: (o, cb) ->
 		that = @
-		if utils.validate(o, ["p","cid"], cb) is false
+		if root.utils.validate(o, ["p","cid"], cb) is false
 			return
 
 		# Make sure this community exists
@@ -150,15 +155,15 @@ class Forums
 				values: [
 					o.cid
 					o.cid.split("_")[0]
-					utils.storeProps(o.p)
+					root.utils.storeProps(o.p)
 				]
 
-			utils.pgqry query, (err, resp) ->
+			root.utils.pgqry query, (err, resp) ->
 				if err
 					cb(err)
 					return
 				if resp.rowCount isnt 1
-					utils.throwError(cb, "insertFailed")
+					root.utils.throwError(cb, "insertFailed")
 					return
 				_cacheAndReturn(resp.rows[0], cb)
 				return
@@ -176,18 +181,18 @@ class Forums
 	# * `v` (Number) The current version number must be supplied for a successful update.
 	#
 	update: (o, cb) ->
-		if utils.validate(o, ["fid","p","v"], cb) is false
+		if root.utils.validate(o, ["fid","p","v"], cb) is false
 			return
 		@get o, (err, resp) ->
 			if err
 				cb(err)
 				return
 			if resp.v isnt o.v
-				utils.throwError(cb, "invalidVersion")
+				root.utils.throwError(cb, "invalidVersion")
 				return
 
-			o.p = utils.cleanProps(resp.p, o.p)
-			if utils.validate(o, ["p"], cb) is false
+			o.p = root.utils.cleanProps(resp.p, o.p)
+			if root.utils.validate(o, ["p"], cb) is false
 				return
 
 			# Nothing changed. Bail out and return the current item.
@@ -204,12 +209,12 @@ class Forums
 					o.v
 				]
 			
-			utils.pgqry query, (err, resp) ->
+			root.utils.pgqry query, (err, resp) ->
 				if err
 					cb(err)
 					return
 				if resp.rowCount is 0
-					utils.throwError(cb, "invalidVersion")
+					root.utils.throwError(cb, "invalidVersion")
 					return
 				_cacheAndReturn(resp.rows[0], cb)
 				return
@@ -218,7 +223,7 @@ class Forums
 
 
 _cacheAndReturn = (data, cb) ->
-	data = utils.respPrepare(data)
+	data = root.utils.respPrepare(data)
 	if data.id
 		memcached.set _mckey(data), data, 86400, (err,resp) ->
 	cb(null, data)

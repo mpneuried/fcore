@@ -4,7 +4,6 @@
 		"name": "fcore",
 		"user": "postgres"
 	},
-	"memcached": ["127.0.0.1:11211"],
 	"port": 8080
 
 }

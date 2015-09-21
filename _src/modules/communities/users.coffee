@@ -9,7 +9,7 @@ FIELDS = "id, cid, c, v, p, extid"
 class Users
 
 	delete: (o, cb) ->
-		if utils.validate(o, ["id", "cid"], cb) is false
+		if root.utils.validate(o, ["id", "cid"], cb) is false
 			return
 		@get o, (err, resp) ->
 			if err
@@ -36,7 +36,7 @@ class Users
 
 
 	get: (o, cb) ->
-		if utils.validate(o, ["id","cid"], cb) is false
+		if root.utils.validate(o, ["id","cid"], cb) is false
 			return
 		memcached.get _mckey(o), (err, resp) ->
 			if err
@@ -70,7 +70,7 @@ class Users
 
 
 	getUserIdFromExtId: (o, cb) ->
-		if utils.validate(o, ["extid", "cid"], cb) is false
+		if root.utils.validate(o, ["extid", "cid"], cb) is false
 			return
 		key = "#{mcprefix}#{o.cid}_extid_#{o.extid}"
 		memcached.get key, (err, resp) ->
@@ -120,7 +120,7 @@ class Users
 			keystocheck = ["cid","p","id"]
 			if o.extid?
 				keystocheck.push("extid")
-			if utils.validate(o, keystocheck, cb) is false
+			if root.utils.validate(o, keystocheck, cb) is false
 				return
 			@preCheckUserExtId o, (err, o) ->
 				if err
@@ -176,7 +176,7 @@ class Users
 	# * `esk` (String) Exclusive Start Key: 
 	#
 	messagesByUser: (o, cb) ->
-		if utils.validate(o, ["cid", "id", "esk"], cb) is false
+		if root.utils.validate(o, ["cid", "id", "esk"], cb) is false
 			return
 		o = utils.limitCheck(o, 10, 50)
 		esk = ""
@@ -206,7 +206,7 @@ class Users
 	# Returns the number of messages a single user has created in a community
 	#
 	msgcount: (o, cb) ->
-		if utils.validate(o, ["cid", "id"], cb) is false
+		if root.utils.validate(o, ["cid", "id"], cb) is false
 			return
 		query =
 			name: "msgcount"
@@ -258,7 +258,7 @@ class Users
 		keystocheck = ["cid","id","p","v"]
 		if o.extid?
 			keystocheck.push("extid")
-		if utils.validate(o, keystocheck, cb) is false
+		if root.utils.validate(o, keystocheck, cb) is false
 			return
 		@get o, (err, user) =>
 			if err
@@ -270,7 +270,7 @@ class Users
 				return
 
 			o.p = utils.cleanProps(user.p, o.p)
-			if utils.validate(o, ["p"], cb) is false
+			if root.utils.validate(o, ["p"], cb) is false
 				return
 
 			# Nothing changed. Bail out and return the current item.
@@ -337,7 +337,7 @@ class Users
 		o.id = o.esk or ""
 		if o.id
 			tovalidate.push("id")
-		if utils.validate(o, tovalidate, cb) is false
+		if root.utils.validate(o, tovalidate, cb) is false
 			return
 		o = utils.limitCheck(o, 100, 500)
 		query =
@@ -362,7 +362,7 @@ class Users
 		if not o.a?
 			cb(null, {})
 			return
-		if utils.validate(o, ["fid", "a"], cb) is false
+		if root.utils.validate(o, ["fid", "a"], cb) is false
 			return
 		forums.get o, (err, forum) =>
 			if err
