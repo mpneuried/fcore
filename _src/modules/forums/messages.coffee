@@ -181,32 +181,55 @@ class Messages
 		if root.utils.validate(o, ["fid","tid","esk"], cb) is false
 			return
 		o = root.utils.limitCheck(o, 50, 50)
-		esk = ""
-		order = "DESC"
-		comparer = "<"
 
-		if o.forward is "true"
-			 order = "ASC"
-			 comparer = ">"
-
-		if o.esk
-			esk = "AND id #{comparer} $4"
-		query =
-			name: "messages by thread#{o.forward is "true"}#{Boolean(o.esk)}"
-			text: "SELECT #{FIELDS} FROM m WHERE fid = $1 and tid = $2 #{esk} ORDER BY ID #{order} LIMIT $3"
-			values: [
-				o.fid
-				o.tid
-				o.limit
-			]
-		if o.esk
-			query.values.push(o.esk)
-		root.utils.pgqry query, (err, resp) ->
+		threads.get o, (err, thread) ->
 			if err
 				cb(err)
 				return
-			
-			cb(null, root.utils.messageQueryPrepare(resp.rows))
+
+			esk = ""
+			order = "DESC"
+			comparer = "<"
+
+			if o.forward is "true"
+				 order = "ASC"
+				 comparer = ">"
+
+			if o.esk
+				esk = "AND id #{comparer} $4"
+
+			prepstatementkey = "#{o.forward is "true"}#{Boolean(o.esk)}"
+			cachekey = "mbt#{o.tid}#{thread.v}#{o.limit}#{prepstatementkey}#{o.esk or ''}"
+
+			# Try to get this query from cache
+			memcached.get cachekey, (err, resp) ->
+				if err
+					cb(err)
+					return
+				if resp isnt undefined
+					# Cache hit
+					cb(null, resp)
+					return
+
+				query =
+					name: "messages by thread#{prepstatementkey}"
+					text: "SELECT #{FIELDS} FROM m WHERE fid = $1 and tid = $2 #{esk} ORDER BY ID #{order} LIMIT $3"
+					values: [
+						o.fid
+						o.tid
+						o.limit
+					]
+				if o.esk
+					query.values.push(o.esk)
+				root.utils.pgqry query, (err, resp) ->
+					if err
+						cb(err)
+						return
+					result = root.utils.messageQueryPrepare(resp.rows)
+					memcached.set cachekey, result, 2000000, ->
+					cb(null, result)
+					return
+				return
 			return
 		return
 

@@ -55,7 +55,7 @@ class Threads
 	get: (o, cb) ->
 		if root.utils.validate(o, ["tid","fid"], cb) is false
 			return
-		memcached.get _mckey(o), (err, resp) ->
+		memcached.get _mckey({id: o.tid}), (err, resp) ->
 			if err
 				cb(err)
 				return
@@ -158,43 +158,65 @@ class Threads
 			return
 		o = root.utils.limitCheck(o, 50, 50)
 		
-		order = "ORDER BY id"
-		orderitem = "id"
-		if o.bylm
-			order = "ORDER BY lm"
-			orderitem = "lm"
-		if o.forward
-			order = order + " ASC"
-			comparer = ">"
-			esk = "#{orderitem} > ''"
-		else
-			order = order + " DESC"
-			comparer = "<"
-			esk = "#{orderitem} < 'Z'"
-
-		if o.esk
-			if o.bylm 
-				esk = "lm #{comparer} $2"
-			else
-				esk = "id #{comparer} $2"
-
-		query =
-			name: "threads by forum #{o.bylm}#{o.forward}#{Boolean(o.esk)}"
-			text: "SELECT #{FIELDS} FROM t WHERE fid = $1 AND #{esk} #{order} LIMIT 50"
-			values: [
-				o.fid
-			]
-		if o.esk
-			query.values.push(esk)
-		root.utils.pgqry query, (err, resp) =>
+		forums.get o, (err, forum) ->
 			if err
 				cb(err)
 				return
-			if resp.rowCount > 0
-				lastitem = _.last(resp.rows)
-				lastitem.lek = lastitem.id
 
-			cb(null, root.utils.threadQueryPrepare(resp.rows))
+			order = "ORDER BY id"
+			orderitem = "id"
+			
+			if o.bylm
+				order = "ORDER BY lm"
+				orderitem = "lm"
+
+			if o.forward
+				order = order + " ASC"
+				comparer = ">"
+				esk = "#{orderitem} > ''"
+			else
+				order = order + " DESC"
+				comparer = "<"
+				esk = "#{orderitem} < 'Z'"
+
+			if o.esk
+				if o.bylm 
+					esk = "lm #{comparer} $2"
+				else
+					esk = "id #{comparer} $2"
+
+			prepstatementkey = "#{o.bylm}#{o.forward}#{Boolean(o.esk)}"
+			cachekey = "tbf#{o.fid}#{forum.v}#{prepstatementkey}#{o.esk or ''}"
+
+			# Try to get this query from cache
+			memcached.get cachekey, (err, resp) ->
+				if err
+					cb(err)
+					return
+				if resp isnt undefined
+					# Cache hit
+					cb(null, resp)
+					return
+				query =
+					name: "threads by forum #{prepstatementkey}"
+					text: "SELECT #{FIELDS} FROM t WHERE fid = $1 AND #{esk} #{order} LIMIT 50"
+					values: [
+						o.fid
+					]
+				if o.esk
+					query.values.push(o.esk)
+				root.utils.pgqry query, (err, resp) =>
+					if err
+						cb(err)
+						return
+					if resp.rowCount > 0
+						lastitem = _.last(resp.rows)
+						lastitem.lek = lastitem.id
+					result = root.utils.threadQueryPrepare(resp.rows)
+					memcached.set cachekey, result, 2000000, ->
+					cb(null, result)
+					return
+				return
 			return
 		return
 
@@ -292,3 +314,4 @@ module.exports = new Threads()
 
 users = require "../communities/users"
 messages = require "./messages"
+forums = require "./forums"
