@@ -212,7 +212,7 @@ class Threads
 						return
 					if resp.rowCount > 0
 						lastitem = _.last(resp.rows)
-						lastitem.lek = lastitem.id
+						lastitem.lek = if o.bylm then lastitem.lm else lastitem.id
 					result = root.utils.threadQueryPrepare(resp.rows)
 					memcached.set cachekey, result, 2000000, ->
 					cb(null, result)
