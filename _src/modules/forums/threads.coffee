@@ -181,9 +181,9 @@ class Threads
 
 			if o.esk
 				if o.bylm 
-					esk = "lm #{comparer} $2"
+					esk = "lm #{comparer} $3"
 				else
-					esk = "id #{comparer} $2"
+					esk = "id #{comparer} $3"
 
 			prepstatementkey = "#{o.bylm}#{o.forward}#{Boolean(o.esk)}"
 			cachekey = "tbf#{o.fid}#{forum.v}#{prepstatementkey}#{o.esk or ''}"
@@ -199,9 +199,10 @@ class Threads
 					return
 				query =
 					name: "threads by forum #{prepstatementkey}"
-					text: "SELECT #{FIELDS} FROM t WHERE fid = $1 AND #{esk} #{order} LIMIT 50"
+					text: "SELECT #{FIELDS} FROM t WHERE fid = $1 AND #{esk} #{order} LIMIT $2"
 					values: [
 						o.fid
+						o.limit
 					]
 				if o.esk
 					query.values.push(o.esk)
